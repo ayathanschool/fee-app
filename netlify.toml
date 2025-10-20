@@ -1,0 +1,11 @@
+# netlify.toml
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+# Proxy /gas to your Apps Script deployment (works for GET and POST)
+[[redirects]]
+  from = "/gas"
+  to = "https://script.google.com/macros/s/AKfycbwZBWak3p40iIEO8fAX1js014xRj401q8VvceYNU3z8IERTTpnfNlsUioSVl0aKgNU/exec"
+  status = 200
+  force = true
