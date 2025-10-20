@@ -12,40 +12,8 @@
     <link rel="apple-touch-icon" href="./icon-192.png" />
     <link rel="manifest" href="./manifest.webmanifest" />
     <meta name="theme-color" content="#2563eb" />
-    <!-- GitHub Pages SPA redirect -->
-    <script type="text/javascript">
-      // Redirect for GitHub Pages SPA routing
-      (function() {
-        // Don't run this script on localhost or in development
-        if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
-          return;
-        }
-        
-        // Check if we need to redirect (we came from a 404 page)
-        const redirectSegment = '?/';
-        const l = window.location;
-        const query = l.search;
-        
-        if (query.indexOf(redirectSegment) !== -1) {
-          // Extract the path from the query
-          const path = query.split(redirectSegment)[1].split('&')[0];
-          
-          // Reconstruct any remaining query parameters
-          let remainingQuery = '';
-          if (query.indexOf('&') !== -1) {
-            remainingQuery = '?' + query
-              .split('&')
-              .slice(1)
-              .join('&')
-              .replace(/~and~/g, '&');
-          }
-          
-          // Perform the redirect using history API
-          const newPath = l.pathname + path + remainingQuery + l.hash;
-          window.history.replaceState(null, null, newPath);
-        }
-      })();
-    </script>
+    <!-- Simple GitHub Pages SPA router helper -->
+    <script src="./gh-pages-spa.js"></script>
   </head>
   <body class="bg-gray-50">
     <div id="root"></div>
