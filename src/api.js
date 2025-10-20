@@ -8,8 +8,8 @@ export const BASE_URL = import.meta.env.DEV
 // Note: For dev, Vite rewrites "/gas" to the configured deployment in vite.config.js
 
 // Your API key (must match API_KEY in Apps Script Script Properties)
-// Prefer env var VITE_API_KEY; fallback to default for convenience.
-const API_KEY = import.meta.env.VITE_API_KEY || "feemgr-2025";
+// Prefer env var VITE_API_KEY; fallback to placeholder for development only
+const API_KEY = import.meta.env.VITE_API_KEY || "dev-env-missing-api-key";
 
 /* -------------------- CORS-safe helpers -------------------- */
 // GET: no custom headers -> simple request -> no preflight
