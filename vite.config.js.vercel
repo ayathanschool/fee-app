@@ -1,0 +1,33 @@
+import { defineConfig } from 'vite'
+import react from '@vitejs/plugin-react'
+
+export default defineConfig({
+  // Using automatic base detection for different environments
+  base: process.env.DEPLOY_TARGET === 'github' ? '/fee-app/' : '/',
+  plugins: [react()],
+  publicDir: 'public',
+  build: {
+    outDir: 'dist',
+    assetsDir: 'assets',
+    emptyOutDir: true,
+    sourcemap: false,
+    rollupOptions: {
+      output: {
+        manualChunks: undefined,
+      },
+    },
+  },
+  server: {
+    proxy: {
+      '/gas': {
+        target: 'https://script.google.com',
+        changeOrigin: true,
+        secure: true,
+        rewrite: (p) => p.replace(
+          /^\/gas/,
+          '/macros/s/AKfycbyWCzApXWxr5gr5DTYyDN8QDheGKCGbtZ-XxILuJxmeWITiK0vhGVLX1RYhUcFNTQlC/exec'
+        ),
+      },
+    },
+  },
+})
