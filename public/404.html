@@ -4,31 +4,18 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Page Not Found</title>
-  <meta http-equiv="refresh" content="0;url=/fee-app/" />
+  <!-- Super simple redirect to the app with path preserved in hash -->
   <script>
-    // Single Page App routing handler for GitHub Pages
-    // Redirects all 404s back to index.html with the original URL path in the query string
     (function() {
-      // Get the current path (everything after the repository name)
-      const repo = 'fee-app'; // Must match repo name in vite.config.js base path
-      const pathSegmentsToKeep = 1; // Keep the first segment (repo name)
+      // Extract the path after "/fee-app/" from URL
+      const path = window.location.pathname.replace(/^\/fee-app\//, '');
       
-      const l = window.location;
-      // Handle direct 404 access case
-      if (l.search[1] === '/') {
-        const decoded = l.search.slice(1).split('&').map(function(s) { 
-          return s.replace(/~and~/g, '&')
-        }).join('?');
-        window.history.replaceState(null, null,
-            l.pathname.slice(0, -1) + decoded + l.hash
-        );
-        return;
-      }
-      
-      // Redirect to home page with path preserved
-      const path = l.pathname.split('/').slice(2).join('/');
-      window.location.href = '/fee-app/#/' + path;
+      // Redirect to the main page with the path as a hash route
+      window.location.replace('/fee-app/#/' + path);
     })();
+  </script>
+  <!-- Fallback redirect if script fails -->
+  <meta http-equiv="refresh" content="0;url=/fee-app/" />
   </script>
   <style>
     body {
