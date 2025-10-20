@@ -1,14 +1,17 @@
-// This script helps with SPA routing on GitHub Pages
+// Simple SPA routing helper for GitHub Pages
 (function() {
-  // Get the base URL path
-  const baseUrl = '/fee-app/'; // Must match repo name in vite.config.js base path
+  // Basic pathname handling for SPA on GitHub Pages
+  const basePath = '/fee-app/';
   
-  // If we have a hash route but no hash in the URL, extract from the path
-  if (window.location.pathname.startsWith(baseUrl) && 
-      window.location.pathname.length > baseUrl.length &&
+  // Only redirect if this is a path-based route (not the root or already using hash)
+  if (window.location.pathname.startsWith(basePath) && 
+      window.location.pathname.length > basePath.length && 
       !window.location.hash) {
-    // Extract the path after the base URL to use as route
-    const route = window.location.pathname.substring(baseUrl.length);
-    window.location.replace(baseUrl + '#/' + route);
+    
+    // Convert the path to a hash route
+    const route = window.location.pathname.substring(basePath.length);
+    
+    // Redirect to the hash-based route equivalent
+    window.location.replace(basePath + '#/' + route);
   }
 })();
