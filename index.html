@@ -4,9 +4,10 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Fee Collection</title>
-    <!-- Content Security Policy -->
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self' https://script.google.com; connect-src 'self' https://script.google.com; style-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com; script-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com; font-src 'self' data: https://r2cdn.perplexity.ai;">
+    <!-- We're removing the CSP meta tag as GitHub Pages provides its own CSP headers -->
+    <!-- External resources are loaded within allowed domains -->
     <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="./custom.css">
     <link rel="icon" type="image/png" href="./icon-192.png" />
     <link rel="apple-touch-icon" href="./icon-192.png" />
     <link rel="manifest" href="./manifest.webmanifest" />
@@ -48,6 +49,7 @@
   </head>
   <body class="bg-gray-50">
     <div id="root"></div>
-    <script type="module" src="./src/main.jsx"></script>
+    <!-- When built by Vite, this will be replaced with the correct path -->
+    <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>
