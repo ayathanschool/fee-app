@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Page Not Found</title>
+  <meta http-equiv="refresh" content="0;url=/fee-app/" />
   <script>
     // Single Page App routing handler for GitHub Pages
     // Redirects all 404s back to index.html with the original URL path in the query string
@@ -24,20 +25,9 @@
         return;
       }
       
-      // Handle normal navigation case
-      const pathPrefix = l.pathname.split('/').slice(0, pathSegmentsToKeep + 1).join('/') + '/';
-      l.replace(
-        pathPrefix + 
-        l.pathname
-          .slice(pathPrefix.length)
-          .split('/')
-          .map(segment => encodeURIComponent(segment))
-          .join('/') + 
-        '?/' + 
-        l.pathname.slice(pathPrefix.length) +
-        (l.search ? '&' + l.search.slice(1).replace(/&/g, '~and~') : '') + 
-        l.hash
-      );
+      // Redirect to home page with path preserved
+      const path = l.pathname.split('/').slice(2).join('/');
+      window.location.href = '/fee-app/#/' + path;
     })();
   </script>
   <style>
@@ -76,7 +66,7 @@
 <body>
   <div class="container">
     <h1>Redirecting...</h1>
-    <p>If you're not redirected automatically, <a href="/">click here</a> to go to the homepage.</p>
+    <p>If you're not redirected automatically, <a href="/fee-app/">click here</a> to go to the homepage.</p>
     <p class="redirecting">You'll be redirected to the main application in a moment.</p>
   </div>
 </body>
