@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Page Not Found</title>
+  <script>
+    // Single Page App routing handler for GitHub Pages
+    // Redirects all 404s back to index.html with the original URL path in the query string
+    (function() {
+      // Get the current path (everything after the repository name)
+      const repo = 'fee-app'; // Must match repo name in vite.config.js base path
+      const pathSegmentsToKeep = 1; // Keep the first segment (repo name)
+      
+      const l = window.location;
+      // Handle direct 404 access case
+      if (l.search[1] === '/') {
+        const decoded = l.search.slice(1).split('&').map(function(s) { 
+          return s.replace(/~and~/g, '&')
+        }).join('?');
+        window.history.replaceState(null, null,
+            l.pathname.slice(0, -1) + decoded + l.hash
+        );
+        return;
+      }
+      
+      // Handle normal navigation case
+      const pathPrefix = l.pathname.split('/').slice(0, pathSegmentsToKeep + 1).join('/') + '/';
+      l.replace(
+        pathPrefix + 
+        l.pathname
+          .slice(pathPrefix.length)
+          .split('/')
+          .map(segment => encodeURIComponent(segment))
+          .join('/') + 
+        '?/' + 
+        l.pathname.slice(pathPrefix.length) +
+        (l.search ? '&' + l.search.slice(1).replace(/&/g, '~and~') : '') + 
+        l.hash
+      );
+    })();
+  </script>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      text-align: center;
+      background-color: #f5f5f5;
+      color: #333;
+    }
+    .container {
+      max-width: 600px;
+      padding: 2rem;
+      background-color: white;
+      border-radius: 8px;
+      box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    }
+    h1 {
+      margin-bottom: 1rem;
+    }
+    p {
+      margin-bottom: 2rem;
+    }
+    .redirecting {
+      font-style: italic;
+      color: #666;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Redirecting...</h1>
+    <p>If you're not redirected automatically, <a href="/">click here</a> to go to the homepage.</p>
+    <p class="redirecting">You'll be redirected to the main application in a moment.</p>
+  </div>
+</body>
+</html>
