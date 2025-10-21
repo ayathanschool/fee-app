@@ -6,7 +6,6 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "postbuild": "powershell -Command \"Copy-Item -Path ./public/*.html -Destination ./dist/ -Force\"",
     "preview": "vite preview"
   },
   "dependencies": {
