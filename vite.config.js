@@ -2,8 +2,8 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
 export default defineConfig({
-  // Base path for GitHub Pages deployment - update this with your new repo name
-  base: '/fee-app/', // Using the repository name for GitHub Pages
+  // Base path is empty for Netlify deployment
+  base: '/',
   plugins: [react()],
   publicDir: 'public', // Explicitly set public directory
   build: {
