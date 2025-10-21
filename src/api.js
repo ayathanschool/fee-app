@@ -1,18 +1,14 @@
 // src/api.js
 // --- Apps Script Web App URL ---
 // In development, route through Vite proxy to avoid CORS. 
-// In production, decide based on hosting platform
-const isNetlify = typeof window !== 'undefined' && window.location.hostname.includes('netlify.app');
-
-// If on Netlify, use the redirects configured in netlify.toml
-// Otherwise, use direct GAS URL for GitHub Pages
+// In production, use proxy route for both Netlify and Vercel
 export const BASE_URL = import.meta.env.DEV
   ? "/gas"
-  : isNetlify
-    ? "/gas" 
-    : "https://script.google.com/macros/s/AKfycbyWCzApXWxr5gr5DTYyDN8QDheGKCGbtZ-XxILuJxmeWITiK0vhGVLX1RYhUcFNTQlC/exec";
+  : "/gas";
   
-// Note: For dev, Vite rewrites "/gas" to the configured deployment in vite.config.js
+// Note: 
+// - Dev: Vite rewrites "/gas" to the configured deployment in vite.config.js
+// - Production: Netlify uses netlify.toml redirects, Vercel uses vercel.json rewrites
 
 // Your API key (must match API_KEY in Apps Script Script Properties)
 // Prefer env var VITE_API_KEY; fallback to placeholder for development only
