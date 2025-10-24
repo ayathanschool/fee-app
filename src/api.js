@@ -184,32 +184,6 @@ export function unvoidReceipt(receiptNo) {
   return postPlain({ action: "unvoidReceipt", key: API_KEY, receiptNo });
 }
 
-// Get due fee notifications (legacy function)
-export function getDueNotifications(classFilter = '', daysThreshold = 0) {
-  return fetch(`${BASE_URL}?action=getDueNotifications&class=${encodeURIComponent(classFilter)}&threshold=${daysThreshold}&key=${API_KEY}`, { cache: "no-store" })
-    .then(res => res.json())
-    .then(data => {
-      console.log("Due notifications (legacy):", data);
-      return data;
-    });
-}
-
-// Get structured due fee notifications with more details
-export function getDueFeeNotifications(classFilter = '', daysThreshold = 0) {
-  // Apps Script currently exposes this action as `getDueNotifications`.
-  // Keep this client helper named getDueFeeNotifications for clarity but
-  // call the server-side action that exists.
-  return fetch(`${BASE_URL}?action=getDueNotifications&class=${encodeURIComponent(classFilter)}&threshold=${daysThreshold}&key=${API_KEY}`, { cache: "no-store" })
-    .then(res => res.json())
-    .then(data => {
-      if (!data.ok) {
-        throw new Error(data.error || 'Failed to retrieve notifications');
-      }
-      console.log("Due fee notifications:", data.data);
-      return data.data;
-    });
-}
-
 // Process bulk payments for multiple students (legacy)
 export function bulkPayment(payload) {
   return postPlain({ action: "bulkPayment", key: API_KEY, ...payload })

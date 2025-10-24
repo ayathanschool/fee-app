@@ -5,7 +5,6 @@ import {
 } from 'lucide-react';
 import ReceiptModal from './components/ReceiptModal';
 import StudentFeeStatus from './components/StudentFeeStatus';
-import DueNotifications from './components/DueNotifications';
 import BulkPaymentForm from './components/BulkPaymentForm';
 import ReportsTab from './components/ReportsTab';
 import Login from './Login';
@@ -887,10 +886,6 @@ export default function App() {
               teacherClass={teacherClass}
             />
             
-            <div className="mt-6">
-              <DueNotifications />
-            </div>
-            
             {role !== 'teacher' && (
               <div className="mt-6">
                 <BulkPaymentForm 
@@ -922,7 +917,7 @@ export default function App() {
 }
 
 // ---------------- Reminders subcomponent ----------------
-// ---------------- Reminders subcomponent (with grouping + pending filter) ----------------
+// ---------------- Reminders subcomponent ----------------
 function RemindersTab({ students, feeheads, payments, teacherClass }) {
   // local helpers (kept here so the component is drop-in)
   const ckey = (v) => String(v ?? '').replace(/\s+/g, '').toLowerCase();
@@ -972,41 +967,44 @@ function RemindersTab({ students, feeheads, payments, teacherClass }) {
     const today = new Date();
     const rows = [];
 
-    students
+    // Filter students by class and teacher restrictions
+    const filteredStudents = students
       .filter(s => (remClass === 'All') || ckey(s.cls || s.class) === ckey(remClass))
-      .filter(s => !teacherClass || ckey(s.cls || s.class) === ckey(teacherClass))
-      .forEach(s => {
-        const cls = s.cls || s.class;
-        const adm = String(s.admNo || '');
-        const phone = s.phone || s.mobile || '';
+      .filter(s => !teacherClass || ckey(s.cls || s.class) === ckey(teacherClass));
 
-        feeheads
-          .filter(f => ckey(f.class) === ckey(cls))    // only this class' heads
-          .forEach(f => {
-            const head = String(f.feeHead || '');
-            const alreadyPaid = paidMap.get(adm)?.has(head);
+    filteredStudents.forEach(s => {
+      const cls = s.cls || s.class;
+      const adm = String(s.admNo || '');
+      const phone = s.phone || s.mobile || '';
 
-            if (alreadyPaid) return;
+      // Get feeheads for this student's class
+      const classFeeheads = feeheads.filter(f => ckey(f.class) === ckey(cls));
 
-            // decide overdue
-            const dueDate = f.dueDate ? new Date(f.dueDate) : null;
-            const overdue = dueDate ? dueDate < today : false;
+      classFeeheads.forEach(f => {
+        const head = String(f.feeHead || '');
+        const alreadyPaid = paidMap.get(adm)?.has(head);
 
-            // if "only overdue" is ON, skip future not-yet-due items
-            if (onlyOverdue && !overdue) return;
+        if (alreadyPaid) return;
 
-            rows.push({
-              admNo: adm,
-              name: s.name || s.studentName,
-              cls,
-              phone,
-              feeHead: head,
-              amount: Number(f.amount || 0),
-              dueDate: f.dueDate || '',
-              overdue
-            });
-          });
+        // decide overdue
+        const dueDate = f.dueDate ? new Date(f.dueDate) : null;
+        const overdue = dueDate ? dueDate < today : false;
+
+        // if "only overdue" is ON, skip future not-yet-due items
+        if (onlyOverdue && !overdue) return;
+
+        rows.push({
+          admNo: adm,
+          name: s.name || s.studentName,
+          cls,
+          phone,
+          feeHead: head,
+          amount: Number(f.amount || 0),
+          dueDate: f.dueDate || '',
+          overdue
+        });
       });
+    });
 
     // sort stable: class, name, feeHead
     return rows.sort((a,b)=>
@@ -1117,6 +1115,19 @@ function RemindersTab({ students, feeheads, payments, teacherClass }) {
 
   return (
     <div className="bg-white rounded-lg shadow p-4 space-y-4">
+      {/* DEBUG INFO PANEL */}
+      {teacherClass && (
+        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+          <h4 className="text-sm font-medium text-yellow-800 mb-2">Debug Info (Teacher: {teacherClass})</h4>
+          <div className="text-xs text-yellow-700 space-y-1">
+            <div>Total Students: {students.length} | Filtered for class: {students.filter(s => ckey(s.cls || s.class) === ckey(teacherClass)).length}</div>
+            <div>Total Fee Heads: {feeheads.length} | For class {teacherClass}: {feeheads.filter(f => ckey(f.class) === ckey(teacherClass)).length}</div>
+            <div>Defaulters Found: {totalCount} | Only Overdue: {onlyOverdue ? 'Yes' : 'No'}</div>
+            <div>Class Filter: {remClass} | Teacher Class Normalized: "{ckey(teacherClass)}"</div>
+          </div>
+        </div>
+      )}
+
       <div className="flex flex-col sm:flex-row gap-3 sm:items-end">
         <div>
           <label className="block text-xs text-gray-500 mb-1">Filter by Class</label>
