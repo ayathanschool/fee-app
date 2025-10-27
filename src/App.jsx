@@ -668,6 +668,11 @@ export default function App() {
                 <button onClick={()=>setActiveTab('feestatus')} className={`py-3 px-1 border-b-2 font-medium text-sm ${activeTab==='feestatus'?'border-blue-500 text-blue-600':'border-transparent text-gray-500'}`}>
                   <FileSearch className="w-4 h-4 inline mr-1" /> Fee Status
                 </button>
+                {role === 'admin' && (
+                  <button onClick={()=>setActiveTab('outstanding')} className={`py-3 px-1 border-b-2 font-medium text-sm ${activeTab==='outstanding'?'border-blue-500 text-blue-600':'border-transparent text-gray-500'}`}>
+                    <Users className="w-4 h-4 inline mr-1" /> Outstanding
+                  </button>
+                )}
               </>
             )}
             <button onClick={()=>setActiveTab('reminders')} className={`py-3 px-1 border-b-2 font-medium text-sm ${activeTab==='reminders'?'border-blue-500 text-blue-600':'border-transparent text-gray-500'}`}>
@@ -897,6 +902,15 @@ export default function App() {
           <StudentFeeStatus />
         )}
 
+        {/* ---------------- Outstanding Fees (Admin Only) ---------------- */}
+        {activeTab==='outstanding' && role==='admin' && (
+          <OutstandingFeesTab
+            students={students}
+            feeheads={feeheads}
+            payments={payments}
+          />
+        )}
+
         {/* ---------------- Reminders ---------------- */}
         {activeTab==='reminders' && (
           <div className="space-y-6">
@@ -933,6 +947,361 @@ export default function App() {
       </main>
 
       {receipt && <ReceiptModal data={receipt} onClose={()=>setReceipt(null)} />}
+    </div>
+  );
+}
+
+// ---------------- Outstanding Fees subcomponent (Admin Only) ----------------
+function OutstandingFeesTab({ students, feeheads, payments }) {
+  const [filterClass, setFilterClass] = useState('All');
+  const [filterFeeHead, setFilterFeeHead] = useState('All');
+  const [showOverdueOnly, setShowOverdueOnly] = useState(false);
+  const [minAmount, setMinAmount] = useState('');
+  const [maxAmount, setMaxAmount] = useState('');
+
+  // Get unique classes and fee heads for filters
+  const classes = useMemo(() => {
+    const set = new Set(students.map(s => s.cls || s.class).filter(Boolean).map(String));
+    return Array.from(set).sort((a,b)=>String(a).localeCompare(String(b)));
+  }, [students]);
+
+  const allFeeHeads = useMemo(() => {
+    const set = new Set(feeheads.map(f => String(f.feeHead)).filter(Boolean));
+    return Array.from(set).sort();
+  }, [feeheads]);
+
+  // Build paid status map
+  const paidMap = useMemo(() => {
+    const map = new Map(); // admNo -> Set(feeHead)
+    payments.forEach(p => {
+      const isVoid = String(p.void||'').toUpperCase().startsWith('Y');
+      if (isVoid) return;
+      const adm = String(p.admNo || '');
+      if (!map.has(adm)) map.set(adm, new Set());
+      map.get(adm).add(String(p.feeHead));
+    });
+    return map;
+  }, [payments]);
+
+  // Calculate outstanding fees
+  const outstandingData = useMemo(() => {
+    const results = [];
+    const today = new Date();
+
+    students.forEach(student => {
+      const admNo = String(student.admNo || '');
+      const studentClass = String(student.class || student.cls || '');
+      const studentName = String(student.name || '');
+
+      // Apply class filter
+      if (filterClass !== 'All' && studentClass !== filterClass) return;
+
+      // Get applicable fee heads for this student
+      const applicableFees = feeheads.filter(f => 
+        String(f.class || '').trim() === studentClass.trim()
+      );
+
+      applicableFees.forEach(fee => {
+        const feeHead = String(fee.feeHead || '');
+        const amount = Number(fee.amount || 0);
+        
+        // Apply fee head filter
+        if (filterFeeHead !== 'All' && feeHead !== filterFeeHead) return;
+        
+        // Check if already paid
+        const studentPaid = paidMap.get(admNo) || new Set();
+        if (studentPaid.has(feeHead)) return;
+
+        // Calculate if overdue
+        let isOverdue = false;
+        let daysOverdue = 0;
+        if (fee.dueDate) {
+          const dueDate = new Date(fee.dueDate);
+          if (!isNaN(dueDate)) {
+            const timeDiff = today.getTime() - dueDate.getTime();
+            daysOverdue = Math.floor(timeDiff / (1000 * 60 * 60 * 24));
+            isOverdue = daysOverdue > 0;
+          }
+        }
+
+        // Apply overdue filter
+        if (showOverdueOnly && !isOverdue) return;
+
+        // Apply amount filters
+        if (minAmount !== '' && amount < Number(minAmount)) return;
+        if (maxAmount !== '' && amount > Number(maxAmount)) return;
+
+        results.push({
+          admNo,
+          studentName,
+          studentClass,
+          feeHead,
+          amount,
+          dueDate: fee.dueDate || '',
+          isOverdue,
+          daysOverdue: Math.max(0, daysOverdue),
+          phone: student.phone || student.mobile || ''
+        });
+      });
+    });
+
+    return results.sort((a, b) => {
+      // Sort by: overdue status (overdue first), then by days overdue (desc), then by amount (desc)
+      if (a.isOverdue !== b.isOverdue) return b.isOverdue - a.isOverdue;
+      if (a.daysOverdue !== b.daysOverdue) return b.daysOverdue - a.daysOverdue;
+      return b.amount - a.amount;
+    });
+  }, [students, feeheads, paidMap, filterClass, filterFeeHead, showOverdueOnly, minAmount, maxAmount]);
+
+  // Calculate summary statistics
+  const summary = useMemo(() => {
+    const totalStudents = new Set(outstandingData.map(d => d.admNo)).size;
+    const totalAmount = outstandingData.reduce((sum, d) => sum + d.amount, 0);
+    const overdueAmount = outstandingData.filter(d => d.isOverdue).reduce((sum, d) => sum + d.amount, 0);
+    const overdueCount = outstandingData.filter(d => d.isOverdue).length;
+    
+    return {
+      totalStudents,
+      totalRecords: outstandingData.length,
+      totalAmount,
+      overdueAmount,
+      overdueCount
+    };
+  }, [outstandingData]);
+
+  // Group by student for better overview
+  const groupedData = useMemo(() => {
+    const grouped = new Map();
+    
+    outstandingData.forEach(record => {
+      const key = record.admNo;
+      if (!grouped.has(key)) {
+        grouped.set(key, {
+          admNo: record.admNo,
+          studentName: record.studentName,
+          studentClass: record.studentClass,
+          phone: record.phone,
+          fees: [],
+          totalAmount: 0,
+          overdueAmount: 0,
+          earliestDue: record.dueDate
+        });
+      }
+      
+      const group = grouped.get(key);
+      group.fees.push({
+        feeHead: record.feeHead,
+        amount: record.amount,
+        dueDate: record.dueDate,
+        isOverdue: record.isOverdue,
+        daysOverdue: record.daysOverdue
+      });
+      group.totalAmount += record.amount;
+      if (record.isOverdue) group.overdueAmount += record.amount;
+      
+      // Track earliest due date
+      if (record.dueDate && (!group.earliestDue || new Date(record.dueDate) < new Date(group.earliestDue))) {
+        group.earliestDue = record.dueDate;
+      }
+    });
+    
+    return Array.from(grouped.values()).sort((a, b) => b.totalAmount - a.totalAmount);
+  }, [outstandingData]);
+
+  // Download CSV
+  const downloadCSV = () => {
+    const header = ['AdmNo', 'Student', 'Class', 'Phone', 'FeeHead', 'Amount', 'DueDate', 'IsOverdue', 'DaysOverdue'];
+    const rows = outstandingData.map(d => [
+      d.admNo,
+      `"${d.studentName.replace(/"/g, '""')}"`,
+      d.studentClass,
+      d.phone,
+      `"${d.feeHead.replace(/"/g, '""')}"`,
+      d.amount,
+      fmtDateIST(d.dueDate),
+      d.isOverdue ? 'Yes' : 'No',
+      d.daysOverdue
+    ]);
+    
+    const csvContent = [header.join(','), ...rows.map(row => row.join(','))].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'outstanding-fees.csv';
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  return (
+    <div className="bg-white rounded-lg shadow-lg overflow-hidden">
+      <div className="bg-gradient-to-r from-purple-600 to-blue-600 p-6 text-white">
+        <h2 className="text-2xl font-bold flex items-center">
+          <Users className="mr-2" /> Outstanding Fees Dashboard
+        </h2>
+        <p className="opacity-90">Monitor and track unpaid fees across all students</p>
+      </div>
+
+      {/* Filters */}
+      <div className="p-4 border-b bg-gray-50">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Class</label>
+            <select
+              value={filterClass}
+              onChange={e => setFilterClass(e.target.value)}
+              className="w-full px-3 py-2 border rounded-md text-sm"
+            >
+              <option value="All">All Classes</option>
+              {classes.map(cls => (
+                <option key={cls} value={cls}>{cls}</option>
+              ))}
+            </select>
+          </div>
+          
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Fee Head</label>
+            <select
+              value={filterFeeHead}
+              onChange={e => setFilterFeeHead(e.target.value)}
+              className="w-full px-3 py-2 border rounded-md text-sm"
+            >
+              <option value="All">All Fee Heads</option>
+              {allFeeHeads.map(head => (
+                <option key={head} value={head}>{head}</option>
+              ))}
+            </select>
+          </div>
+          
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Min Amount</label>
+            <input
+              type="number"
+              value={minAmount}
+              onChange={e => setMinAmount(e.target.value)}
+              placeholder="₹0"
+              className="w-full px-3 py-2 border rounded-md text-sm"
+            />
+          </div>
+          
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Max Amount</label>
+            <input
+              type="number"
+              value={maxAmount}
+              onChange={e => setMaxAmount(e.target.value)}
+              placeholder="No limit"
+              className="w-full px-3 py-2 border rounded-md text-sm"
+            />
+          </div>
+          
+          <div className="flex items-end">
+            <label className="flex items-center space-x-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={showOverdueOnly}
+                onChange={e => setShowOverdueOnly(e.target.checked)}
+                className="h-4 w-4"
+              />
+              <span className="text-sm text-gray-700">Overdue Only</span>
+            </label>
+          </div>
+        </div>
+      </div>
+
+      {/* Summary Statistics */}
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4 p-4 bg-white">
+        <div className="text-center">
+          <div className="text-2xl font-bold text-blue-600">{summary.totalStudents}</div>
+          <div className="text-sm text-gray-500">Students</div>
+        </div>
+        <div className="text-center">
+          <div className="text-2xl font-bold text-indigo-600">{summary.totalRecords}</div>
+          <div className="text-sm text-gray-500">Fee Items</div>
+        </div>
+        <div className="text-center">
+          <div className="text-2xl font-bold text-purple-600">₹{inr(summary.totalAmount)}</div>
+          <div className="text-sm text-gray-500">Total Outstanding</div>
+        </div>
+        <div className="text-center">
+          <div className="text-2xl font-bold text-red-600">₹{inr(summary.overdueAmount)}</div>
+          <div className="text-sm text-gray-500">Overdue Amount</div>
+        </div>
+        <div className="text-center">
+          <div className="text-2xl font-bold text-orange-600">{summary.overdueCount}</div>
+          <div className="text-sm text-gray-500">Overdue Items</div>
+        </div>
+      </div>
+
+      {/* Action Buttons */}
+      <div className="p-4 border-b">
+        <div className="flex gap-2">
+          <button
+            onClick={downloadCSV}
+            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm flex items-center"
+          >
+            <Download className="w-4 h-4 mr-1" /> Download CSV
+          </button>
+          <button
+            onClick={() => {
+              setFilterClass('All');
+              setFilterFeeHead('All');
+              setShowOverdueOnly(false);
+              setMinAmount('');
+              setMaxAmount('');
+            }}
+            className="px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 text-sm flex items-center"
+          >
+            <RefreshCcw className="w-4 h-4 mr-1" /> Reset Filters
+          </button>
+        </div>
+      </div>
+
+      {/* Data Table - Grouped by Student */}
+      <div className="overflow-x-auto">
+        <table className="min-w-full divide-y divide-gray-200">
+          <thead className="bg-gray-50">
+            <tr>
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Student</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Class</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Outstanding Fees</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Total Amount</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Overdue Amount</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Earliest Due</th>
+            </tr>
+          </thead>
+          <tbody className="bg-white divide-y divide-gray-200">
+            {groupedData.map((group, i) => (
+              <tr key={i} className="hover:bg-gray-50">
+                <td className="px-4 py-3 text-sm">
+                  <div className="font-medium text-gray-900">{group.studentName}</div>
+                  <div className="text-gray-500">({group.admNo})</div>
+                </td>
+                <td className="px-4 py-3 text-sm text-gray-900">{group.studentClass}</td>
+                <td className="px-4 py-3 text-sm">
+                  <div className="space-y-1">
+                    {group.fees.map((fee, j) => (
+                      <div key={j} className={`text-xs ${fee.isOverdue ? 'text-red-600 font-medium' : 'text-gray-600'}`}>
+                        {fee.feeHead}: ₹{inr(fee.amount)}
+                        {fee.isOverdue && ` (${fee.daysOverdue} days overdue)`}
+                      </div>
+                    ))}
+                  </div>
+                </td>
+                <td className="px-4 py-3 text-sm font-medium text-gray-900">₹{inr(group.totalAmount)}</td>
+                <td className="px-4 py-3 text-sm font-medium text-red-600">₹{inr(group.overdueAmount)}</td>
+                <td className="px-4 py-3 text-sm text-gray-900">{fmtDateIST(group.earliestDue)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        
+        {groupedData.length === 0 && (
+          <div className="text-center py-8 text-gray-500">
+            No outstanding fees found with current filters
+          </div>
+        )}
+      </div>
     </div>
   );
 }
