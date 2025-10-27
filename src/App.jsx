@@ -29,6 +29,27 @@ function indianFY(today = new Date()) {
 }
 
 const fmtYMD = (d) => d instanceof Date ? d.toISOString().slice(0,10) : '';
+
+// Format date for display in IST timezone
+const fmtDateIST = (dateStr) => {
+  if (!dateStr) return '-';
+  
+  try {
+    const date = new Date(dateStr);
+    if (isNaN(date)) return dateStr;
+    
+    // Format as DD-MM-YYYY for Indian date format
+    return date.toLocaleDateString('en-IN', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      timeZone: 'Asia/Kolkata'
+    });
+  } catch (err) {
+    return dateStr;
+  }
+};
+
 const cleanPhone = (p) => {
   const digits = String(p || '').replace(/[^\d]/g, '');
   if (digits.startsWith('91')) return digits;
@@ -1059,12 +1080,12 @@ function RemindersTab({ students, feeheads, payments, teacherClass }) {
       .replace('{class}', row.cls)
       .replace('{feeHead}', row.feeHead || '')
       .replace('{amount}', Number(row.amount||0).toLocaleString('en-IN'))
-      .replace('{dueDate}', row.dueDate || '-')
-      .replace('{lines}', `${row.feeHead}: ₹${Number(row.amount||0).toLocaleString('en-IN')} (Due ${row.dueDate || '-'})`);
+      .replace('{dueDate}', fmtDateIST(row.dueDate))
+      .replace('{lines}', `${row.feeHead}: ₹${Number(row.amount||0).toLocaleString('en-IN')} (Due ${fmtDateIST(row.dueDate)})`);
 
   const renderGroupedTemplate = (g) => {
     const lines = g.items.map(it =>
-      `${it.feeHead}: ₹${Number(it.amount||0).toLocaleString('en-IN')} (Due ${it.dueDate || '-'})`
+      `${it.feeHead}: ₹${Number(it.amount||0).toLocaleString('en-IN')} (Due ${fmtDateIST(it.dueDate)})`
     ).join('\n');
     return remTemplate
       .replace('{name}', g.name)
@@ -1073,7 +1094,7 @@ function RemindersTab({ students, feeheads, payments, teacherClass }) {
       // if user left {feeHead}/{amount}/{dueDate} in template, keep them harmless
       .replace('{feeHead}', '')
       .replace('{amount}', '')
-      .replace('{dueDate}', g.earliestDue || '-')
+      .replace('{dueDate}', fmtDateIST(g.earliestDue))
       .replace('{lines}', lines);
   };
 
@@ -1089,7 +1110,7 @@ function RemindersTab({ students, feeheads, payments, teacherClass }) {
           `"${g.phone||''}"`,
           `"${g.items.map(i => `${i.feeHead} (₹${i.amount})`).join('; ')}"`,
           g.total,
-          g.earliestDue || ''
+          fmtDateIST(g.earliestDue)
         ].join(',')
       ));
       const blob = new Blob([lines.join('\n')], { type: 'text/csv' });
@@ -1100,7 +1121,7 @@ function RemindersTab({ students, feeheads, payments, teacherClass }) {
     } else {
       const header = ['AdmNo','Name','Class','Phone','FeeHead','Amount','DueDate'];
       const lines = [header.join(',')].concat(itemRows.map(r =>
-        [r.admNo, `"${r.name}"`, r.cls, `"${r.phone||''}"`, `"${r.feeHead}"`, r.amount, r.dueDate].join(',')
+        [r.admNo, `"${r.name}"`, r.cls, `"${r.phone||''}"`, `"${r.feeHead}"`, r.amount, fmtDateIST(r.dueDate)].join(',')
       ));
       const blob = new Blob([lines.join('\n')], { type: 'text/csv' });
       const url = URL.createObjectURL(blob);
@@ -1197,7 +1218,7 @@ function RemindersTab({ students, feeheads, payments, teacherClass }) {
                       {g.items.map(it => it.feeHead).join(', ')}
                     </td>
                     <td className="px-3 py-2 text-sm">₹{Number(g.total||0).toLocaleString('en-IN')}</td>
-                    <td className="px-3 py-2 text-sm">{g.earliestDue || '-'}</td>
+                    <td className="px-3 py-2 text-sm">{fmtDateIST(g.earliestDue)}</td>
                     <td className="px-3 py-2 text-sm">
                       {href ? <a className="text-green-700 hover:underline" href={href} target="_blank" rel="noreferrer">WhatsApp</a> : <span className="text-red-500">No phone</span>}
                     </td>
@@ -1239,7 +1260,7 @@ function RemindersTab({ students, feeheads, payments, teacherClass }) {
                     <td className="px-3 py-2 text-sm">{r.cls}</td>
                     <td className="px-3 py-2 text-sm">{r.feeHead}</td>
                     <td className="px-3 py-2 text-sm">₹{Number(r.amount||0).toLocaleString('en-IN')}</td>
-                    <td className="px-3 py-2 text-sm">{r.dueDate || '-'}</td>
+                    <td className="px-3 py-2 text-sm">{fmtDateIST(r.dueDate)}</td>
                     <td className="px-3 py-2 text-sm">
                       {href ? <a className="text-green-700 hover:underline" href={href} target="_blank" rel="noreferrer">WhatsApp</a> : <span className="text-red-500">No phone</span>}
                     </td>
