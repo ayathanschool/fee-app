@@ -56,6 +56,35 @@ const cleanPhone = (p) => {
   if (digits.length === 10) return '91' + digits;
   return digits || '';
 };
+
+// Format date for display - handles both ISO and DD/MM/YYYY formats
+const formatDate = (dateStr) => {
+  if (!dateStr) return '-';
+  
+  // If it's already in DD/MM/YYYY format, return as is
+  if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(dateStr)) return dateStr;
+  
+  // Parse ISO or other formats
+  let date;
+  if (typeof dateStr === 'string' && dateStr.includes('T')) {
+    // ISO format with time (e.g., 2025-12-14T18:30:00.000Z)
+    date = new Date(dateStr);
+  } else if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+    // YYYY-MM-DD format
+    date = new Date(dateStr + 'T00:00:00');
+  } else {
+    date = new Date(dateStr);
+  }
+  
+  if (isNaN(date.getTime())) return String(dateStr);
+  
+  // Format as DD/MM/YYYY
+  const day = String(date.getDate()).padStart(2, '0');
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const year = date.getFullYear();
+  return `${day}/${month}/${year}`;
+};
+
 const parseYMD = (s) => {
   if (!s) return null;
   if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return new Date(s + 'T00:00:00');
@@ -897,7 +926,7 @@ export default function App() {
                     const isVoid = String(p.void||'').toUpperCase().startsWith('Y');
                     return (
                       <tr key={i} className={`hover:bg-gray-50 ${isVoid ? 'opacity-60' : ''}`}>
-                        <td className="px-3 py-2 text-sm">{p.date}</td>
+                        <td className="px-3 py-2 text-sm">{formatDate(p.date)}</td>
                         <td className="px-3 py-2 text-sm">{p.receiptNo}</td>
                         <td className="px-3 py-2 text-sm">{p.name}</td>
                         <td className="px-3 py-2 text-sm">{p.cls || p.class}</td>
