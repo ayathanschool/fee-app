@@ -1,9 +1,37 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { BarChart3, Download, Filter, RefreshCcw } from 'lucide-react';
+import { BarChart3, Download, Filter, RefreshCcw, ChevronDown, ChevronUp } from 'lucide-react';
 
 // Helper functions
 const ckey = (v) => String(v ?? '').replace(/\s+/g, '').toLowerCase();
 const inr = (n) => Number(n || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 });
+
+// Format date for display - handles both ISO and DD/MM/YYYY formats
+const formatDate = (dateStr) => {
+  if (!dateStr) return '-';
+  
+  // If it's already in DD/MM/YYYY format, return as is
+  if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(dateStr)) return dateStr;
+  
+  // Parse ISO or other formats
+  let date;
+  if (typeof dateStr === 'string' && dateStr.includes('T')) {
+    // ISO format with time (e.g., 2025-12-14T18:30:00.000Z)
+    date = new Date(dateStr);
+  } else if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+    // YYYY-MM-DD format
+    date = new Date(dateStr + 'T00:00:00');
+  } else {
+    date = new Date(dateStr);
+  }
+  
+  if (isNaN(date.getTime())) return String(dateStr);
+  
+  // Format as DD/MM/YYYY
+  const day = String(date.getDate()).padStart(2, '0');
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const year = date.getFullYear();
+  return `${day}/${month}/${year}`;
+};
 
 function ReportsTab({ students, payments, feeheads, role, teacherClass }) {
   const classes = useMemo(() => {
@@ -53,6 +81,8 @@ function ReportsTab({ students, payments, feeheads, role, teacherClass }) {
   const [repMax, setRepMax] = useState('');
   const [repSearch, setRepSearch] = useState('');
   const [repGroupBy, setRepGroupBy] = useState('none');
+  const [showFilters, setShowFilters] = useState(true);
+  const [showAdvanced, setShowAdvanced] = useState(false);
 
   useEffect(() => {
     const t = new Date();
@@ -170,7 +200,7 @@ function ReportsTab({ students, payments, feeheads, role, teacherClass }) {
       const total = Number(r.amount||0) + (repIncludeFine ? Number(r.fine||0) : 0);
       const v = String(r.void||'').toUpperCase().startsWith('Y') ? 'Y' : '';
       return [
-        r.date, r.receiptNo || '', r.admNo, `"${(r.name||'').replace(/"/g,'""')}"`,
+        formatDate(r.date), r.receiptNo || '', r.admNo, `"${(r.name||'').replace(/"/g,'""')}"`,
         r.cls || '', `"${String(r.feeHead||'').replace(/"/g,'""')}"`,
         r.amount||0, r.fine||0, total, r.mode||'', v
       ].join(',');
@@ -210,279 +240,259 @@ function ReportsTab({ students, payments, feeheads, role, teacherClass }) {
         <p className="opacity-90">Generate detailed payment analytics and summaries</p>
       </div>
       
-      {/* Filters section */}
-      <div className="p-4 border-b">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="font-medium flex items-center">
-            <Filter className="w-4 h-4 mr-1" /> Filters
-          </h3>
-          <button
-            onClick={resetFilters}
-            className="text-sm flex items-center px-2 py-1 border rounded-md hover:bg-gray-50"
-          >
-            <RefreshCcw className="w-4 h-4 mr-1" /> Reset Filters
-          </button>
+      {/* Summary stats - Move to top for visibility */}
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3 p-4 bg-gray-50 border-b">
+        <div className="bg-white rounded-lg p-3 border">
+          <div className="text-xs text-gray-500 uppercase">Records</div>
+          <div className="text-2xl font-bold text-gray-800">{repSummary.count}</div>
         </div>
         
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          {/* Date filters */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Date Range</label>
-            <div className="flex space-x-2 mb-2">
-              <button
-                onClick={() => setRepQuick('today')}
-                className={`text-xs px-2 py-1 rounded-full ${
-                  repQuick === 'today' 
-                    ? 'bg-blue-100 border border-blue-300' 
-                    : 'bg-gray-100 hover:bg-gray-200'
-                }`}
-              >
-                Today
-              </button>
-              <button
-                onClick={() => setRepQuick('week')}
-                className={`text-xs px-2 py-1 rounded-full ${
-                  repQuick === 'week' 
-                    ? 'bg-blue-100 border border-blue-300' 
-                    : 'bg-gray-100 hover:bg-gray-200'
-                }`}
-              >
-                This Week
-              </button>
-              <button
-                onClick={() => setRepQuick('month')}
-                className={`text-xs px-2 py-1 rounded-full ${
-                  repQuick === 'month' 
-                    ? 'bg-blue-100 border border-blue-300' 
-                    : 'bg-gray-100 hover:bg-gray-200'
-                }`}
-              >
-                This Month
-              </button>
-              <button
-                onClick={() => setRepQuick('fy')}
-                className={`text-xs px-2 py-1 rounded-full ${
-                  repQuick === 'fy' 
-                    ? 'bg-blue-100 border border-blue-300' 
-                    : 'bg-gray-100 hover:bg-gray-200'
-                }`}
-              >
-                FY
-              </button>
-              <button
-                onClick={() => setRepQuick('custom')}
-                className={`text-xs px-2 py-1 rounded-full ${
-                  repQuick === 'custom' 
-                    ? 'bg-blue-100 border border-blue-300' 
-                    : 'bg-gray-100 hover:bg-gray-200'
-                }`}
-              >
-                Custom
-              </button>
-            </div>
-            <div className="flex gap-2">
-              <div>
-                <label className="block text-xs text-gray-500 mb-1">From</label>
-                <input
-                  type="date"
-                  value={repFrom}
-                  onChange={e => {setRepFrom(e.target.value); setRepQuick('custom');}}
-                  className="px-2 py-1 border rounded text-sm w-full"
-                />
-              </div>
-              <div>
-                <label className="block text-xs text-gray-500 mb-1">To</label>
-                <input
-                  type="date"
-                  value={repTo}
-                  onChange={e => {setRepTo(e.target.value); setRepQuick('custom');}}
-                  className="px-2 py-1 border rounded text-sm w-full"
-                />
-              </div>
-            </div>
-          </div>
-          
-          {/* Class/Fee/Mode filters */}
-          <div>
-            <div className="grid grid-cols-3 gap-2">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Class</label>
-                <select
-                  value={repClass}
-                  onChange={e => setRepClass(e.target.value)}
-                  className="px-2 py-1 border rounded text-sm w-full"
-                  disabled={role === 'teacher' && !!teacherClass}
-                >
-                  <option>All</option>
-                  {classes.map(cls => (
-                    <option key={cls}>{cls}</option>
-                  ))}
-                </select>
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Fee Head</label>
-                <select
-                  value={repHead}
-                  onChange={e => setRepHead(e.target.value)}
-                  className="px-2 py-1 border rounded text-sm w-full"
-                >
-                  <option>All</option>
-                  {(repClass !== 'All' && feeHeadsByClass[repClass]) 
-                    ? feeHeadsByClass[repClass].map(head => (
-                        <option key={head}>{head}</option>
-                      ))
-                    : feeHeadsByClass['All'].map(head => (
-                        <option key={head}>{head}</option>
-                      ))
-                  }
-                </select>
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Mode</label>
-                <select
-                  value={repMode}
-                  onChange={e => setRepMode(e.target.value)}
-                  className="px-2 py-1 border rounded text-sm w-full"
-                >
-                  {allModes.map(mode => (
-                    <option key={mode}>{mode}</option>
-                  ))}
-                </select>
-              </div>
-            </div>
-            
-            <div className="mt-2 flex items-center gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
-                <select
-                  value={repStatus}
-                  onChange={e => setRepStatus(e.target.value)}
-                  className="px-2 py-1 border rounded text-sm"
-                >
-                  <option value="Valid">Valid Only</option>
-                  <option value="Voided">Voided Only</option>
-                  <option value="All">All</option>
-                </select>
-              </div>
-              
-              <label className="flex items-center space-x-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={repIncludeFine}
-                  onChange={e => setRepIncludeFine(e.target.checked)}
-                  className="h-4 w-4"
-                />
-                <span className="text-sm text-gray-700">Include Fine in Total</span>
-              </label>
-            </div>
-          </div>
-          
-          {/* Amount/Search filters */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Amount Range</label>
-            <div className="flex gap-2">
-              <div>
-                <label className="block text-xs text-gray-500 mb-1">Min</label>
-                <input
-                  type="number"
-                  value={repMin}
-                  onChange={e => setRepMin(e.target.value)}
-                  placeholder="Min"
-                  className="px-2 py-1 border rounded text-sm w-full"
-                />
-              </div>
-              <div>
-                <label className="block text-xs text-gray-500 mb-1">Max</label>
-                <input
-                  type="number"
-                  value={repMax}
-                  onChange={e => setRepMax(e.target.value)}
-                  placeholder="Max"
-                  className="px-2 py-1 border rounded text-sm w-full"
-                />
-              </div>
-            </div>
-            
-            <div className="mt-2">
-              <label className="block text-sm font-medium text-gray-700 mb-1">Search</label>
-              <input
-                type="text"
-                value={repSearch}
-                onChange={e => setRepSearch(e.target.value)}
-                placeholder="Name, Adm#, Receipt#"
-                className="px-2 py-1 border rounded text-sm w-full"
-              />
-            </div>
-          </div>
-          
-          {/* Group by and Export */}
-          <div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Group By</label>
-              <select
-                value={repGroupBy}
-                onChange={e => setRepGroupBy(e.target.value)}
-                className="px-2 py-1 border rounded text-sm w-full"
-              >
-                <option value="none">No Grouping</option>
-                <option value="class">Class</option>
-                <option value="feeHead">Fee Head</option>
-                <option value="mode">Payment Mode</option>
-                <option value="day">Day</option>
-                <option value="month">Month</option>
-                <option value="student">Student</option>
-              </select>
-            </div>
-            
-            <div className="mt-4 flex gap-2">
-              <button
-                onClick={() => downloadCSV(reportRows)}
-                className="flex items-center px-3 py-2 border rounded-md text-sm hover:bg-gray-50 flex-1"
-              >
-                <Download className="w-4 h-4 mr-1" /> Raw Data
-              </button>
-              
-              {grouped && (
-                <button
-                  onClick={downloadGroupedCSV}
-                  className="flex items-center px-3 py-2 border rounded-md text-sm hover:bg-gray-50 flex-1"
-                >
-                  <Download className="w-4 h-4 mr-1" /> Grouped
-                </button>
-              )}
-            </div>
-          </div>
+        <div className="bg-white rounded-lg p-3 border">
+          <div className="text-xs text-gray-500 uppercase">Total Amount</div>
+          <div className="text-2xl font-bold text-blue-600">₹{inr(repSummary.included)}</div>
+        </div>
+        
+        <div className="bg-white rounded-lg p-3 border">
+          <div className="text-xs text-gray-500 uppercase">Gross</div>
+          <div className="text-2xl font-bold text-green-600">₹{inr(repSummary.grossAmt)}</div>
+        </div>
+        
+        <div className="bg-white rounded-lg p-3 border">
+          <div className="text-xs text-gray-500 uppercase">Fine</div>
+          <div className="text-2xl font-bold text-orange-600">₹{inr(repSummary.fineAmt)}</div>
+        </div>
+        
+        <div className="bg-white rounded-lg p-3 border">
+          <div className="text-xs text-gray-500 uppercase">Voided</div>
+          <div className="text-2xl font-bold text-red-600">{repSummary.voidCount}</div>
         </div>
       </div>
       
-      {/* Summary stats */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-3 p-4">
-        <div className="bg-gray-50 rounded-lg p-3 border">
-          <div className="text-sm text-gray-500">Records</div>
-          <div className="text-xl font-semibold">{repSummary.count}</div>
+      {/* Filters section - Collapsible */}
+      <div className="border-b">
+        <div className="w-full px-4 py-3 flex items-center justify-between bg-gray-50">
+          <button
+            onClick={() => setShowFilters(!showFilters)}
+            className="flex items-center font-medium text-gray-700 hover:text-gray-900"
+          >
+            <Filter className="w-4 h-4 mr-2" /> 
+            Filters & Options
+            <span className="ml-2 text-sm text-gray-500">
+              ({repClass !== 'All' || repHead !== 'All' || repMode !== 'All' || repSearch 
+                ? 'Active' : 'None'})
+            </span>
+            <span className="ml-2">
+              {showFilters ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+            </span>
+          </button>
+          <button
+            onClick={resetFilters}
+            className="text-sm flex items-center px-2 py-1 border rounded-md hover:bg-white bg-white"
+          >
+            <RefreshCcw className="w-3 h-3 mr-1" /> Reset
+          </button>
         </div>
         
-        <div className="bg-gray-50 rounded-lg p-3 border">
-          <div className="text-sm text-gray-500">Total Amount</div>
-          <div className="text-xl font-semibold text-blue-600">₹{inr(repSummary.included)}</div>
-        </div>
-        
-        <div className="bg-gray-50 rounded-lg p-3 border">
-          <div className="text-sm text-gray-500">Gross Amount</div>
-          <div className="text-xl font-semibold">₹{inr(repSummary.grossAmt)}</div>
-        </div>
-        
-        <div className="bg-gray-50 rounded-lg p-3 border">
-          <div className="text-sm text-gray-500">Fine Amount</div>
-          <div className="text-xl font-semibold">₹{inr(repSummary.fineAmt)}</div>
-        </div>
-        
-        <div className="bg-gray-50 rounded-lg p-3 border">
-          <div className="text-sm text-gray-500">Voided Transactions</div>
-          <div className="text-xl font-semibold">{repSummary.voidCount}</div>
-        </div>
+        {showFilters && (
+          <div className="p-4 bg-gray-50">
+            {/* Quick filters - Always visible */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-4">
+              {/* Date Range */}
+              <div className="bg-white p-3 rounded-lg border">
+                <label className="block text-sm font-semibold text-gray-700 mb-2">📅 Date Range</label>
+                <div className="flex flex-wrap gap-1 mb-2">
+                  {[
+                    { key: 'today', label: 'Today' },
+                    { key: 'week', label: 'Week' },
+                    { key: 'month', label: 'Month' },
+                    { key: 'fy', label: 'FY' },
+                    { key: 'custom', label: 'Custom' }
+                  ].map(opt => (
+                    <button
+                      key={opt.key}
+                      onClick={() => setRepQuick(opt.key)}
+                      className={`text-xs px-2 py-1 rounded transition-colors ${
+                        repQuick === opt.key 
+                          ? 'bg-blue-600 text-white' 
+                          : 'bg-gray-100 hover:bg-gray-200'
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <input
+                      type="date"
+                      value={repFrom}
+                      onChange={e => {setRepFrom(e.target.value); setRepQuick('custom');}}
+                      className="px-2 py-1.5 border rounded text-xs w-full"
+                    />
+                  </div>
+                  <div>
+                    <input
+                      type="date"
+                      value={repTo}
+                      onChange={e => {setRepTo(e.target.value); setRepQuick('custom');}}
+                      className="px-2 py-1.5 border rounded text-xs w-full"
+                    />
+                  </div>
+                </div>
+              </div>
+              
+              {/* Class, Fee Head, Mode */}
+              <div className="bg-white p-3 rounded-lg border">
+                <label className="block text-sm font-semibold text-gray-700 mb-2">🎯 Quick Filters</label>
+                <div className="space-y-2">
+                  <select
+                    value={repClass}
+                    onChange={e => setRepClass(e.target.value)}
+                    className="px-2 py-1.5 border rounded text-sm w-full"
+                    disabled={role === 'teacher' && !!teacherClass}
+                  >
+                    <option>All Classes</option>
+                    {classes.map(cls => (
+                      <option key={cls}>{cls}</option>
+                    ))}
+                  </select>
+                  
+                  <select
+                    value={repHead}
+                    onChange={e => setRepHead(e.target.value)}
+                    className="px-2 py-1.5 border rounded text-sm w-full"
+                  >
+                    <option>All Fee Heads</option>
+                    {(repClass !== 'All' && feeHeadsByClass[repClass]) 
+                      ? feeHeadsByClass[repClass].map(head => (
+                          <option key={head}>{head}</option>
+                        ))
+                      : feeHeadsByClass['All'].map(head => (
+                          <option key={head}>{head}</option>
+                        ))
+                    }
+                  </select>
+                  
+                  <select
+                    value={repMode}
+                    onChange={e => setRepMode(e.target.value)}
+                    className="px-2 py-1.5 border rounded text-sm w-full"
+                  >
+                    <option>All Payment Modes</option>
+                    {allModes.filter(m => m !== 'All').map(mode => (
+                      <option key={mode}>{mode}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              
+              {/* Search, Status, Export */}
+              <div className="bg-white p-3 rounded-lg border">
+                <label className="block text-sm font-semibold text-gray-700 mb-2">🔍 Search & Export</label>
+                <div className="space-y-2">
+                  <input
+                    type="text"
+                    value={repSearch}
+                    onChange={e => setRepSearch(e.target.value)}
+                    placeholder="Name, Adm#, Receipt#..."
+                    className="px-2 py-1.5 border rounded text-sm w-full"
+                  />
+                  
+                  <select
+                    value={repGroupBy}
+                    onChange={e => setRepGroupBy(e.target.value)}
+                    className="px-2 py-1.5 border rounded text-sm w-full"
+                  >
+                    <option value="none">📊 No Grouping</option>
+                    <option value="class">By Class</option>
+                    <option value="feeHead">By Fee Head</option>
+                    <option value="mode">By Payment Mode</option>
+                    <option value="day">By Day</option>
+                    <option value="month">By Month</option>
+                    <option value="student">By Student</option>
+                  </select>
+                  
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      onClick={() => downloadCSV(reportRows)}
+                      className="flex items-center justify-center px-2 py-1.5 bg-blue-600 text-white rounded text-xs hover:bg-blue-700 transition-colors"
+                    >
+                      <Download className="w-3 h-3 mr-1" /> Raw CSV
+                    </button>
+                    
+                    {grouped && (
+                      <button
+                        onClick={downloadGroupedCSV}
+                        className="flex items-center justify-center px-2 py-1.5 bg-green-600 text-white rounded text-xs hover:bg-green-700 transition-colors"
+                      >
+                        <Download className="w-3 h-3 mr-1" /> Grouped
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            {/* Advanced filters - Collapsible */}
+            <button
+              onClick={() => setShowAdvanced(!showAdvanced)}
+              className="text-sm text-blue-600 hover:text-blue-700 flex items-center mb-2"
+            >
+              {showAdvanced ? <ChevronUp className="w-4 h-4 mr-1" /> : <ChevronDown className="w-4 h-4 mr-1" />}
+              Advanced Filters
+            </button>
+            
+            {showAdvanced && (
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-white p-3 rounded-lg border">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Amount Range</label>
+                  <div className="flex gap-2">
+                    <input
+                      type="number"
+                      value={repMin}
+                      onChange={e => setRepMin(e.target.value)}
+                      placeholder="Min"
+                      className="px-2 py-1.5 border rounded text-sm w-full"
+                    />
+                    <input
+                      type="number"
+                      value={repMax}
+                      onChange={e => setRepMax(e.target.value)}
+                      placeholder="Max"
+                      className="px-2 py-1.5 border rounded text-sm w-full"
+                    />
+                  </div>
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
+                  <select
+                    value={repStatus}
+                    onChange={e => setRepStatus(e.target.value)}
+                    className="px-2 py-1.5 border rounded text-sm w-full"
+                  >
+                    <option value="Valid">✅ Valid Only</option>
+                    <option value="Voided">❌ Voided Only</option>
+                    <option value="All">All Records</option>
+                  </select>
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Options</label>
+                  <label className="flex items-center space-x-2 cursor-pointer bg-gray-50 p-2 rounded">
+                    <input
+                      type="checkbox"
+                      checked={repIncludeFine}
+                      onChange={e => setRepIncludeFine(e.target.checked)}
+                      className="h-4 w-4"
+                    />
+                    <span className="text-sm text-gray-700">Include Fine in Total</span>
+                  </label>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </div>
       
       {/* Results - either grouped or detailed */}
@@ -540,7 +550,7 @@ function ReportsTab({ students, payments, feeheads, role, teacherClass }) {
                     
                     return (
                       <tr key={i} className={`hover:bg-gray-50 ${isVoid ? 'opacity-60 line-through' : ''}`}>
-                        <td className="px-3 py-2 text-sm">{r.date}</td>
+                        <td className="px-3 py-2 text-sm">{formatDate(r.date)}</td>
                         <td className="px-3 py-2 text-sm">{r.receiptNo}</td>
                         <td className="px-3 py-2 text-sm">{r.name} ({r.admNo})</td>
                         <td className="px-3 py-2 text-sm">{r.cls}</td>

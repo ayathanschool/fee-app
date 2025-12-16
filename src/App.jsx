@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   Search, History, CreditCard, CheckCircle, User, Calendar, XCircle,
-  BarChart3, Filter, Download, RefreshCcw, FileSearch, Bell, Users
+  BarChart3, Filter, Download, RefreshCcw, FileSearch, Bell, Users, Receipt
 } from 'lucide-react';
 import ReceiptModal from './components/ReceiptModal';
 import StudentFeeStatus from './components/StudentFeeStatus';
@@ -196,73 +196,68 @@ export default function App() {
       phone: s.phone || s.mobile || ''
     }));
     setShowSuggestions(false);
+
+    // Calculate payment status from already-loaded payments (INSTANT - no API call!)
+    const normalizedAdmNo = String(s.admNo).trim().toLowerCase();
     
-    // Then, we need to explicitly wait for paidIndex to update
-    // Look for paid fees for this student in the transaction records
-    const currentPaidIndex = {};
+    // Build payment map for this student from existing data
+    const paymentsByFeeHead = new Map();
     payments.forEach(p => {
-      const same = String(p.admNo).trim().toLowerCase() === String(s.admNo).trim().toLowerCase();
+      const same = String(p.admNo).trim().toLowerCase() === normalizedAdmNo;
       const notVoided = !String(p.void || '').toUpperCase().startsWith('Y');
       
       if (same && notVoided) {
-        // Get the normalized fee head name
-        const fh = String(p.feeHead).trim();
-        console.log(`Found payment for selected student ${s.admNo}, feeHead: "${fh}", date: ${p.date}, receipt: ${p.receiptNo}`);
-        
-        // Only update if this is a newer payment or we don't have one yet
-        if (!currentPaidIndex[fh] || new Date(p.date) > new Date(currentPaidIndex[fh])) {
-          currentPaidIndex[fh] = p.date;
-          currentPaidIndex[`${fh}_receipt`] = p.receiptNo || '';
+        const feeKey = String(p.feeHead).trim().toLowerCase();
+        if (!paymentsByFeeHead.has(feeKey)) {
+          paymentsByFeeHead.set(feeKey, []);
         }
+        paymentsByFeeHead.get(feeKey).push({
+          date: p.date,
+          receiptNo: p.receiptNo,
+          amount: Number(p.amount || 0),
+          fine: Number(p.fine || 0)
+        });
       }
     });
-    
-    console.log("Current student paid index:", currentPaidIndex);
 
-    // Generate the fee heads list with paid status
+    // Generate the fee heads list with payment status (INSTANT!)
     const heads = feeheads
       .filter(f => ckey(f.class) === ckey(cls))
       .map(f => {
-        const feeHeadKey = String(f.feeHead).trim();
-        // Check if this fee is already paid
-        const isPaid = Object.keys(currentPaidIndex).includes(feeHeadKey);
+        const feeKey = String(f.feeHead).trim().toLowerCase();
+        const paymentsForFee = paymentsByFeeHead.get(feeKey) || [];
+        
+        // Calculate totals
+        const totalPaid = paymentsForFee.reduce((sum, p) => sum + p.amount, 0);
+        const totalFine = paymentsForFee.reduce((sum, p) => sum + p.fine, 0);
+        const expectedAmount = Number(f.amount || 0);
+        const balance = Math.max(0, expectedAmount - totalPaid);
+        
+        const isFullyPaid = totalPaid >= expectedAmount;
+        const isPartiallyPaid = totalPaid > 0 && !isFullyPaid;
+        const displayAmount = isPartiallyPaid ? balance : expectedAmount;
+        
         return {
           feeHead: f.feeHead,
-          amount: f.amount,
+          amount: displayAmount,
+          originalAmount: expectedAmount,
           fine: calcFine(f.dueDate, paymentForm.date),
           dueDate: f.dueDate,
           selected: false,
           waiveFine: false,
           manualFine: false,
-          paidDate: isPaid ? currentPaidIndex[feeHeadKey] : null,
-          receiptNo: isPaid ? currentPaidIndex[`${feeHeadKey}_receipt`] : null
+          isFullyPaid: isFullyPaid,
+          isPartiallyPaid: isPartiallyPaid,
+          totalPaid: totalPaid,
+          balance: balance,
+          payments: paymentsForFee,
+          paidDate: isFullyPaid && paymentsForFee.length > 0 ? paymentsForFee[0].date : null,
+          receiptNo: isFullyPaid && paymentsForFee.length > 0 ? paymentsForFee.map(p => p.receiptNo).join(', ') : null,
+          isPaidConfirmed: isFullyPaid
         };
       });
-    setSelectedFeeHeads(heads);
     
-    // For each fee head, make a server-side check to verify payment status
-    // This ensures we have the most accurate data about which fees are paid
-    Promise.all(heads.map(async (head) => {
-      try {
-        const status = await checkPaymentStatus(s.admNo, head.feeHead);
-        if (status.ok && status.isPaid) {
-          console.log(`Server confirms ${head.feeHead} is already paid for ${s.admNo}`);
-          return {
-            ...head,
-            paidDate: status.matchingRecords?.[0]?.date || new Date().toISOString().slice(0, 10),
-            receiptNo: status.matchingRecords?.[0]?.receiptNo || "Previously paid",
-            isPaidConfirmed: true
-          };
-        }
-        return head;
-      } catch (err) {
-        console.error(`Failed to check payment status for ${head.feeHead}:`, err);
-        return head;
-      }
-    })).then(updatedHeads => {
-      console.log("Updated fee heads with server-confirmed payment status:", updatedHeads);
-      setSelectedFeeHeads(updatedHeads);
-    });
+    setSelectedFeeHeads(heads);
   };
 
   // recalc fines on date change (unless manually edited / waived)
@@ -277,7 +272,7 @@ export default function App() {
   const toggleFeeHeadSelection = (i) =>
     setSelectedFeeHeads(prev => prev.map((f, idx) => {
       if (idx !== i) return f;
-      if (f.paidDate) return f; // cannot select paid
+      if (f.isFullyPaid || f.isPaidConfirmed) return f; // cannot select fully paid
       return { ...f, selected: !f.selected };
     }));
 
@@ -762,13 +757,21 @@ export default function App() {
                       <div key={i} className="border rounded-lg p-4">
                         <div className="flex items-center justify-between mb-3">
                           <label className="flex items-center">
-                            {fee.paidDate || fee.isPaidConfirmed ? (
+                            {fee.isFullyPaid || fee.isPaidConfirmed ? (
                               <>
                                 <CheckCircle className="text-green-600 w-5 h-5 mr-2" />
                                 <span className="font-medium text-gray-900">{fee.feeHead}</span>
                                 <span className="ml-2 inline-flex items-center rounded-full bg-green-100 text-green-700 px-2 py-0.5 text-xs">
-                                  Paid {fee.paidDate ? new Date(fee.paidDate).toLocaleDateString() : "previously"}
-                                  {fee.receiptNo && ` (Receipt ${fee.receiptNo})`}
+                                  Fully Paid ₹{inr(fee.totalPaid || fee.amount)}
+                                  {fee.receiptNo && ` (${fee.receiptNo})`}
+                                </span>
+                              </>
+                            ) : fee.isPartiallyPaid ? (
+                              <>
+                                <input type="checkbox" checked={fee.selected} onChange={()=>toggleFeeHeadSelection(i)} className="h-5 w-5 text-amber-600 rounded mr-2" />
+                                <span className="font-medium text-gray-900">{fee.feeHead}</span>
+                                <span className="ml-2 inline-flex items-center rounded-full bg-amber-100 text-amber-700 px-2 py-0.5 text-xs">
+                                  Partially Paid ₹{inr(fee.totalPaid || 0)} / ₹{inr(fee.amount)} • Balance ₹{inr(fee.balance || 0)}
                                 </span>
                               </>
                             ) : (
@@ -779,11 +782,33 @@ export default function App() {
                             )}
                           </label>
                           <div className="text-right">
-                            <div className="text-sm text-gray-500">₹{inr(fee.amount)}</div>
+                            <div className="text-sm text-gray-500">
+                              ₹{inr(fee.originalAmount || fee.amount)}
+                              {fee.isPartiallyPaid && (
+                                <span className="text-xs text-amber-600 ml-1">(Balance: ₹{inr(fee.balance)})</span>
+                              )}
+                            </div>
                             <div className="text-xs text-gray-400">Due: {fee.dueDate ? new Date(fee.dueDate).toLocaleDateString() : '-'}</div>
                           </div>
                         </div>
-                        {(!fee.paidDate && fee.selected) && (
+
+                        {/* Show payment history for partially paid fees */}
+                        {fee.isPartiallyPaid && fee.payments && fee.payments.length > 0 && (
+                          <div className="mt-2 pt-2 border-t text-xs text-gray-600 bg-amber-50 p-2 rounded">
+                            <div className="font-medium mb-1 flex items-center">
+                              <Receipt className="w-3 h-3 mr-1" />
+                              Previous Payments:
+                            </div>
+                            {fee.payments.map((payment, pIdx) => (
+                              <div key={pIdx} className="flex justify-between">
+                                <span>Receipt {payment.receiptNo} ({new Date(payment.date).toLocaleDateString()})</span>
+                                <span className="font-medium text-green-700">₹{inr(payment.amount)}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        {(!fee.paidDate && !fee.isPaidConfirmed && !fee.isFullyPaid && fee.selected) && (
                           <div className="grid grid-cols-2 gap-3">
                             <div>
                               <label className="block text-xs text-gray-500 mb-1">Amount</label>
@@ -814,7 +839,7 @@ export default function App() {
                 </div>
               )}
 
-              {selectedFeeHeads.some(f=>!f.paidDate && f.selected) && (
+              {selectedFeeHeads.some(f=>!f.isFullyPaid && !f.isPaidConfirmed && f.selected) && (
                 <div className="bg-gray-50 p-4 rounded-lg">
                   <div className="flex justify-between items-center">
                     <span className="font-medium">Total Amount:</span>
@@ -834,7 +859,7 @@ export default function App() {
                 type="button"
                 onClick={handleSubmit}
                 className="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700 disabled:opacity-50"
-                disabled={isSaving || !selectedFeeHeads.some(f => !f.paidDate && f.selected)}
+                disabled={isSaving || !selectedFeeHeads.some(f => !f.isFullyPaid && !f.isPaidConfirmed && f.selected)}
               >
                 {isSaving ? 'Saving…' : (<><CheckCircle className="inline w-4 h-4 mr-1" /> Record Payment</>)}
               </button>

@@ -211,36 +211,71 @@ function normalizeFeeHeadRecord(rec) {
 }
 
 // ---------- Actions ----------
-// Check if a fee head has already been paid for a student
-function isFeePaid(sheet, admNo, feeHead) {
-  if (!sheet || !admNo || !feeHead) return false;
+// Get payment status for a fee head - supports partial payments
+// Returns: { totalPaid, payments: [{date, receiptNo, amount, fine}], isFullyPaid }
+function getPaymentStatus(sheet, admNo, feeHead, expectedAmount) {
+  if (!sheet || !admNo || !feeHead) {
+    return { totalPaid: 0, totalFine: 0, payments: [], isFullyPaid: false };
+  }
   
   const rows = sheet.getDataRange().getValues();
   const headers = rows[0].map(h => String(h || '').toLowerCase());
   const admNoCol = headers.findIndex(h => h === 'admno' || h === 'admission');
   const feeHeadCol = headers.findIndex(h => h === 'feehead' || h === 'head' || h === 'fee head');
+  const amountCol = headers.findIndex(h => h === 'amount');
+  const fineCol = headers.findIndex(h => h === 'fine');
+  const dateCol = headers.findIndex(h => h === 'date');
+  const receiptCol = headers.findIndex(h => h === 'receiptno' || h === 'receipt');
   const voidCol = headers.findIndex(h => h === 'void' || h === 'voided');
   
-  if (admNoCol < 0 || feeHeadCol < 0) return false;
+  if (admNoCol < 0 || feeHeadCol < 0) {
+    return { totalPaid: 0, totalFine: 0, payments: [], isFullyPaid: false };
+  }
   
   // Normalize inputs for case-insensitive comparison
   const normalizedAdmNo = String(admNo).trim().toLowerCase();
   const normalizedFeeHead = String(feeHead).trim().toLowerCase();
   
+  let totalPaid = 0;
+  let totalFine = 0;
+  const payments = [];
+  
   for (let r = 1; r < rows.length; r++) {
-    // Check if this record is for the same student, same fee head, and is not voided
     const rowAdmNo = String(rows[r][admNoCol] || '').trim().toLowerCase();
     const rowFeeHead = String(rows[r][feeHeadCol] || '').trim().toLowerCase();
     const isVoided = voidCol >= 0 && String(rows[r][voidCol] || '').toUpperCase().startsWith('Y');
     
-    if (rowAdmNo === normalizedAdmNo && 
-        rowFeeHead === normalizedFeeHead && 
-        !isVoided) {
-      return true;
+    if (rowAdmNo === normalizedAdmNo && rowFeeHead === normalizedFeeHead && !isVoided) {
+      const amount = Number(rows[r][amountCol] || 0);
+      const fine = Number(rows[r][fineCol] || 0);
+      totalPaid += amount;
+      totalFine += fine;
+      
+      payments.push({
+        date: dateCol >= 0 ? rows[r][dateCol] : '',
+        receiptNo: receiptCol >= 0 ? rows[r][receiptCol] : '',
+        amount: amount,
+        fine: fine
+      });
     }
   }
   
-  return false;
+  // Check if fully paid (handle cases where expectedAmount is not provided)
+  const isFullyPaid = expectedAmount ? (totalPaid >= Number(expectedAmount)) : (totalPaid > 0);
+  
+  return {
+    totalPaid: totalPaid,
+    totalFine: totalFine,
+    payments: payments,
+    isFullyPaid: isFullyPaid,
+    balance: expectedAmount ? Math.max(0, Number(expectedAmount) - totalPaid) : 0
+  };
+}
+
+// Backward compatibility wrapper - checks if fee is fully paid
+function isFeePaid(sheet, admNo, feeHead, expectedAmount) {
+  const status = getPaymentStatus(sheet, admNo, feeHead, expectedAmount);
+  return status.isFullyPaid;
 }
 
 function handleLogin(body) {
@@ -309,24 +344,46 @@ function handleAddPaymentBatch(body) {
   if (!items.length) return jsonResponse({ ok: false, error: 'no_items' });
   
   try {
-    // Check for duplicate fee payments
-    const alreadyPaidItems = [];
+    // Get fee structure to check expected amounts for partial payment validation
+    const feeHeads = getSheetData(CONFIG.SHEET_NAMES.FEEHEADS).data.map(normalizeFeeHeadRecord);
+    
+    // Check payment status and validate partial payments
+    const fullyPaidItems = [];
+    const partialPaymentInfo = [];
+    
     for (const item of items) {
-      if (isFeePaid(sheet, body.admNo, item.feeHead)) {
-        alreadyPaidItems.push(item.feeHead);
+      // Find expected amount for this fee head and class
+      const feeStructure = feeHeads.find(f => 
+        String(f.feeHead).trim().toLowerCase() === String(item.feeHead).trim().toLowerCase() &&
+        String(f.class).trim().toLowerCase() === String(body.cls || body.class).trim().toLowerCase()
+      );
+      
+      const expectedAmount = feeStructure ? Number(feeStructure.amount) : null;
+      const paymentStatus = getPaymentStatus(sheet, body.admNo, item.feeHead, expectedAmount);
+      
+      // Only block if already FULLY paid
+      if (paymentStatus.isFullyPaid) {
+        fullyPaidItems.push(item.feeHead);
+      } else if (paymentStatus.totalPaid > 0) {
+        // Track partial payments for informational purposes
+        partialPaymentInfo.push({
+          feeHead: item.feeHead,
+          previouslyPaid: paymentStatus.totalPaid,
+          newPayment: item.amount,
+          balance: Math.max(0, (expectedAmount || 0) - paymentStatus.totalPaid - (item.amount || 0))
+        });
       }
     }
     
-    // If we found duplicate payments, return an error with details
-    if (alreadyPaidItems.length > 0) {
-      // Log the duplicate attempt for debugging
-      console.log(`Duplicate payment attempt: Student ${body.admNo} for fees ${alreadyPaidItems.join(', ')}`);
+    // Block only fully paid items
+    if (fullyPaidItems.length > 0) {
+      console.log(`Fully paid fees: Student ${body.admNo} for fees ${fullyPaidItems.join(', ')}`);
       
       return jsonResponse({
         ok: false,
-        error: 'duplicate_payment',
-        message: `The following fees have already been paid: ${alreadyPaidItems.join(', ')}`,
-        paidItems: alreadyPaidItems
+        error: 'already_fully_paid',
+        message: `The following fees are already fully paid: ${fullyPaidItems.join(', ')}`,
+        fullyPaidItems: fullyPaidItems
       });
     }
     
@@ -336,12 +393,12 @@ function handleAddPaymentBatch(body) {
     // Append rows
     sheet.getRange(sheet.getLastRow()+1, 1, rows.length, rows[0].length).setValues(rows);
     
-    // Using the most conservative approach for return values:
-    // Only simple string primitives, wrapped in jsonResponse
+    // Return success with partial payment info if applicable
     return jsonResponse({ 
       ok: true, 
       receiptNo: String(receiptNo), 
-      date: String(now) 
+      date: String(now),
+      partialPayments: partialPaymentInfo.length > 0 ? partialPaymentInfo : undefined
     });
   } catch (err) {
     // Detailed error handling
@@ -458,58 +515,39 @@ function triggerWriteAuthorization() {
   };
 }
 
-// Debug function to check if a fee has been paid - can be called directly for testing
+// Debug function to check payment status - supports partial payments
 function debugCheckPayment(admNo, feeHead) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const sheet = ss.getSheetByName(CONFIG.SHEET_NAMES.TRANSACTIONS);
   if (!sheet) return { ok: false, error: 'sheet_not_found' };
   
-  const isPaid = isFeePaid(sheet, admNo, feeHead);
+  // Get expected amount from fee structure
+  const students = getSheetData(CONFIG.SHEET_NAMES.STUDENTS).data;
+  const student = students.find(s => String(s.admNo || '').trim().toLowerCase() === String(admNo).trim().toLowerCase());
   
-  // Get all relevant records for this student/fee head for debugging
-  const rows = sheet.getDataRange().getValues();
-  const headers = rows[0].map(h => String(h || '').toLowerCase());
-  const admNoCol = headers.findIndex(h => h === 'admno' || h === 'admission');
-  const feeHeadCol = headers.findIndex(h => h === 'feehead' || h === 'head' || h === 'fee head');
-  const voidCol = headers.findIndex(h => h === 'void' || h === 'voided');
-  
-  const matchingRecords = [];
-  const normalizedAdmNo = String(admNo).trim().toLowerCase();
-  const normalizedFeeHead = String(feeHead).trim().toLowerCase();
-  
-  for (let r = 1; r < rows.length; r++) {
-    const rowAdmNo = String(rows[r][admNoCol] || '').trim().toLowerCase();
-    const rowFeeHead = String(rows[r][feeHeadCol] || '').trim().toLowerCase();
-    const isVoided = voidCol >= 0 && String(rows[r][voidCol] || '').toUpperCase().startsWith('Y');
-    
-    if (rowAdmNo === normalizedAdmNo && rowFeeHead === normalizedFeeHead) {
-      // Create a record with all relevant data
-      const record = {
-        index: r,
-        date: rows[r][headers.indexOf('date')],
-        receiptNo: rows[r][headers.indexOf('receiptno')],
-        admNo: rows[r][admNoCol],
-        feeHead: rows[r][feeHeadCol],
-        amount: rows[r][headers.indexOf('amount')],
-        isVoided: isVoided
-      };
-      matchingRecords.push(record);
-    }
+  let expectedAmount = null;
+  if (student) {
+    const feeHeads = getSheetData(CONFIG.SHEET_NAMES.FEEHEADS).data.map(normalizeFeeHeadRecord);
+    const feeStructure = feeHeads.find(f => 
+      String(f.feeHead).trim().toLowerCase() === String(feeHead).trim().toLowerCase() &&
+      String(f.class).trim().toLowerCase() === String(student.class).trim().toLowerCase()
+    );
+    expectedAmount = feeStructure ? Number(feeStructure.amount) : null;
   }
+  
+  const paymentStatus = getPaymentStatus(sheet, admNo, feeHead, expectedAmount);
   
   return {
     ok: true,
-    isPaid: isPaid,
     studentId: admNo,
     feeHead: feeHead,
-    normalizedStudentId: normalizedAdmNo,
-    normalizedFeeHead: normalizedFeeHead,
-    matchingRecords: matchingRecords,
-    columnIndices: {
-      admNo: admNoCol,
-      feeHead: feeHeadCol,
-      void: voidCol
-    }
+    expectedAmount: expectedAmount,
+    totalPaid: paymentStatus.totalPaid,
+    totalFine: paymentStatus.totalFine,
+    balance: paymentStatus.balance,
+    isFullyPaid: paymentStatus.isFullyPaid,
+    isPartiallyPaid: paymentStatus.totalPaid > 0 && !paymentStatus.isFullyPaid,
+    payments: paymentStatus.payments
   };
 }
 
@@ -570,17 +608,28 @@ function handleBulkPayment(body) {
         continue;
       }
       
-      // Check for duplicate fees
-      const duplicateFees = [];
+      // Get fee structure for validation
+      const feeHeads = getSheetData(CONFIG.SHEET_NAMES.FEEHEADS).data.map(normalizeFeeHeadRecord);
+      
+      // Check for fully paid fees (partial payments are allowed)
+      const fullyPaidFees = [];
       for (const feeItem of payment.feeHeads) {
-        if (isFeePaid(sheet, payment.admNo, feeItem.feeHead)) {
-          duplicateFees.push(feeItem.feeHead);
+        const feeStructure = feeHeads.find(f => 
+          String(f.feeHead).trim().toLowerCase() === String(feeItem.feeHead).trim().toLowerCase() &&
+          String(f.class).trim().toLowerCase() === String(payment.cls || payment.class).trim().toLowerCase()
+        );
+        
+        const expectedAmount = feeStructure ? Number(feeStructure.amount) : null;
+        const paymentStatus = getPaymentStatus(sheet, payment.admNo, feeItem.feeHead, expectedAmount);
+        
+        if (paymentStatus.isFullyPaid) {
+          fullyPaidFees.push(feeItem.feeHead);
         }
       }
       
-      if (duplicateFees.length > 0) {
-        studentResult.status = 'duplicate';
-        studentResult.errors.push(`Already paid: ${duplicateFees.join(', ')}`);
+      if (fullyPaidFees.length > 0) {
+        studentResult.status = 'fully_paid';
+        studentResult.errors.push(`Already fully paid: ${fullyPaidFees.join(', ')}`);
         results.push(studentResult);
         continue;
       }
@@ -667,48 +716,53 @@ function getStudentFeeStatus(admNo) {
              !String(t.void || '').toUpperCase().startsWith('Y');
     });
   
-  // Check paid status for each fee head
+  // Check payment status for each fee head (including partial payments)
   const feeStatus = feeHeads.map(fee => {
-    const paid = isFeePaid(txSheet, admNo, fee.feeHead);
-    
-    const paymentDetails = paid ? transactions.find(t => 
-      String(t.feeHead).trim().toLowerCase() === String(fee.feeHead).trim().toLowerCase()
-    ) : null;
+    const paymentStatus = getPaymentStatus(txSheet, admNo, fee.feeHead, fee.amount);
     
     return {
       feeHead: fee.feeHead,
-      amount: fee.amount,
+      expectedAmount: fee.amount,
       dueDate: fee.dueDate,
-      paid,
-      paymentDate: paid && paymentDetails ? paymentDetails.date : null,
-      receiptNo: paid && paymentDetails ? paymentDetails.receiptNo : null
+      paid: paymentStatus.isFullyPaid,
+      partiallyPaid: paymentStatus.totalPaid > 0 && !paymentStatus.isFullyPaid,
+      amountPaid: paymentStatus.totalPaid,
+      balance: paymentStatus.balance,
+      totalFine: paymentStatus.totalFine,
+      payments: paymentStatus.payments
     };
   });
   
   // Also include any payments made that are not in the fee structure
   // (e.g., for special fees or fees from another class)
-  const extraPayments = transactions.filter(t => {
-    return !feeStatus.some(f => 
-      String(f.feeHead).trim().toLowerCase() === String(t.feeHead).trim().toLowerCase()
-    );
-  }).map(t => ({
-    feeHead: t.feeHead,
-    amount: Number(t.amount) || 0,
-    dueDate: null,
-    paid: true,
-    paymentDate: t.date,
-    receiptNo: t.receiptNo
-  }));
+  const extraPaymentFeeHeads = [...new Set(
+    transactions
+      .filter(t => !feeStatus.some(f => 
+        String(f.feeHead).trim().toLowerCase() === String(t.feeHead).trim().toLowerCase()
+      ))
+      .map(t => t.feeHead)
+  )];
   
-  // Calculate summary statistics
-  const totalDue = feeStatus.filter(f => !f.paid).reduce((sum, f) => sum + (Number(f.amount) || 0), 0);
-  const totalPaid = [
-    ...feeStatus.filter(f => f.paid), 
-    ...extraPayments
-  ].reduce((sum, f) => sum + (Number(f.amount) || 0), 0);
+  const extraPayments = extraPaymentFeeHeads.map(feeHead => {
+    const paymentStatus = getPaymentStatus(txSheet, admNo, feeHead, null);
+    return {
+      feeHead: feeHead,
+      expectedAmount: null,
+      dueDate: null,
+      paid: true,
+      partiallyPaid: false,
+      amountPaid: paymentStatus.totalPaid,
+      balance: 0,
+      totalFine: paymentStatus.totalFine,
+      payments: paymentStatus.payments
+    };
+  });
   
-  // Calculate fine amounts if applicable
-  const totalFine = transactions.reduce((sum, t) => sum + (Number(t.fine) || 0), 0);
+  // Calculate summary statistics with partial payments
+  const totalExpected = feeStatus.reduce((sum, f) => sum + (Number(f.expectedAmount) || 0), 0);
+  const totalPaid = [...feeStatus, ...extraPayments].reduce((sum, f) => sum + (Number(f.amountPaid) || 0), 0);
+  const totalBalance = feeStatus.reduce((sum, f) => sum + (Number(f.balance) || 0), 0);
+  const totalFine = [...feeStatus, ...extraPayments].reduce((sum, f) => sum + (Number(f.totalFine) || 0), 0);
   
   return {
     ok: true,
@@ -719,12 +773,14 @@ function getStudentFeeStatus(admNo) {
     },
     feeStatus: [...feeStatus, ...extraPayments],
     summary: {
-      totalDue,
-      totalPaid,
-      totalFine,
+      totalExpected: totalExpected,
+      totalPaid: totalPaid,
+      totalBalance: totalBalance,
+      totalFine: totalFine,
       totalPayments: transactions.length,
       paymentComplete: feeStatus.every(f => f.paid),
-      grandTotal: totalDue + totalFine
+      hasPartialPayments: feeStatus.some(f => f.partiallyPaid),
+      grandTotal: totalExpected + totalFine
     }
   };
 }

@@ -39,14 +39,15 @@ const StudentFeeStatus = () => {
   const downloadCSV = () => {
     if (!feeData) return;
 
-    const header = ['FeeHead', 'Amount', 'DueDate', 'Status', 'PaymentDate', 'ReceiptNo'];
+    const header = ['FeeHead', 'ExpectedAmount', 'AmountPaid', 'Balance', 'DueDate', 'Status', 'Payments'];
     const rows = feeData.feeStatus.map(fee => [
       fee.feeHead,
-      fee.amount,
+      fee.expectedAmount || 0,
+      fee.amountPaid || 0,
+      fee.balance || 0,
       fee.dueDate || '',
-      fee.paid ? 'Paid' : 'Pending',
-      fee.paymentDate || '',
-      fee.receiptNo || ''
+      fee.paid ? 'Fully Paid' : (fee.partiallyPaid ? 'Partially Paid' : 'Pending'),
+      fee.payments ? fee.payments.map(p => `${p.receiptNo}(${p.amount})`).join('; ') : ''
     ]);
 
     const csvContent = [
@@ -149,22 +150,30 @@ const StudentFeeStatus = () => {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
               <div className="bg-white p-4 rounded-lg border shadow-sm">
-                <div className="text-sm text-gray-500">Total Due</div>
-                <div className="text-xl font-bold mt-1">₹{inr(feeData.summary.totalDue)}</div>
+                <div className="text-sm text-gray-500">Total Expected</div>
+                <div className="text-xl font-bold mt-1">₹{inr(feeData.summary.totalExpected)}</div>
               </div>
               <div className="bg-white p-4 rounded-lg border shadow-sm">
                 <div className="text-sm text-gray-500">Total Paid</div>
                 <div className="text-xl font-bold text-green-600 mt-1">₹{inr(feeData.summary.totalPaid)}</div>
               </div>
               <div className="bg-white p-4 rounded-lg border shadow-sm">
+                <div className="text-sm text-gray-500">Balance</div>
+                <div className="text-xl font-bold text-orange-600 mt-1">₹{inr(feeData.summary.totalBalance)}</div>
+              </div>
+              <div className="bg-white p-4 rounded-lg border shadow-sm">
                 <div className="text-sm text-gray-500">Fine Amount</div>
                 <div className="text-xl font-bold text-red-600 mt-1">₹{inr(feeData.summary.totalFine)}</div>
               </div>
-              <div className="bg-gradient-to-r from-blue-50 to-indigo-50 p-4 rounded-lg border shadow-sm">
-                <div className="text-sm text-gray-700">Grand Total Due</div>
-                <div className="text-xl font-bold text-indigo-600 mt-1">₹{inr(feeData.summary.grandTotal)}</div>
-              </div>
             </div>
+
+            {/* Show partial payment warning if applicable */}
+            {feeData.summary.hasPartialPayments && (
+              <div className="mt-4 p-3 bg-amber-50 text-amber-800 rounded-md border border-amber-200 flex items-center">
+                <AlertCircle className="w-5 h-5 mr-2 flex-shrink-0" />
+                <span className="text-sm">This student has made partial payments for some fees. Check details below.</span>
+              </div>
+            )}
           </div>
 
           {/* Fee Details Table */}
@@ -175,18 +184,25 @@ const StudentFeeStatus = () => {
                 <thead className="bg-gray-50">
                   <tr>
                     <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Fee Head</th>
-                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
+                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Expected</th>
+                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Paid</th>
+                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Balance</th>
                     <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Due Date</th>
                     <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Payment Date</th>
-                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Receipt</th>
+                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Payments</th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
                   {feeData.feeStatus.map((fee, index) => (
-                    <tr key={index} className={`hover:bg-gray-50 ${fee.paid ? '' : 'bg-amber-50'}`}>
-                      <td className="px-3 py-3 text-sm">{fee.feeHead}</td>
-                      <td className="px-3 py-3 text-sm font-medium">₹{inr(fee.amount)}</td>
+                    <tr key={index} className={`hover:bg-gray-50 ${
+                      fee.paid ? 'bg-green-50' : fee.partiallyPaid ? 'bg-amber-50' : 'bg-red-50'
+                    }`}>
+                      <td className="px-3 py-3 text-sm font-medium">{fee.feeHead}</td>
+                      <td className="px-3 py-3 text-sm">₹{inr(fee.expectedAmount)}</td>
+                      <td className="px-3 py-3 text-sm font-semibold text-green-700">₹{inr(fee.amountPaid)}</td>
+                      <td className="px-3 py-3 text-sm font-semibold text-orange-700">
+                        {fee.balance > 0 ? `₹${inr(fee.balance)}` : '-'}
+                      </td>
                       <td className="px-3 py-3 text-sm">
                         {fee.dueDate ? (
                           <div className="flex items-center">
@@ -197,21 +213,36 @@ const StudentFeeStatus = () => {
                       </td>
                       <td className="px-3 py-3 text-sm">
                         <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium ${
-                          fee.paid ? 'bg-green-100 text-green-800' : 'bg-amber-100 text-amber-800'
+                          fee.paid ? 'bg-green-100 text-green-800' : 
+                          fee.partiallyPaid ? 'bg-amber-100 text-amber-800' :
+                          'bg-red-100 text-red-800'
                         }`}>
                           {fee.paid ? (
-                            <><CheckCircle className="w-3 h-3 mr-1" /> Paid</>
+                            <><CheckCircle className="w-3 h-3 mr-1" /> Fully Paid</>
+                          ) : fee.partiallyPaid ? (
+                            <><AlertCircle className="w-3 h-3 mr-1" /> Partial</>
                           ) : (
                             <><AlertCircle className="w-3 h-3 mr-1" /> Pending</>
                           )}
                         </span>
                       </td>
-                      <td className="px-3 py-3 text-sm">{fee.paymentDate ? new Date(fee.paymentDate).toLocaleDateString() : '-'}</td>
                       <td className="px-3 py-3 text-sm">
-                        {fee.receiptNo ? (
-                          <div className="flex items-center">
-                            <Receipt className="w-4 h-4 mr-1 text-gray-400" />
-                            {fee.receiptNo}
+                        {fee.payments && fee.payments.length > 0 ? (
+                          <div className="space-y-1">
+                            {fee.payments.map((payment, pIndex) => (
+                              <div key={pIndex} className="flex items-center text-xs">
+                                <Receipt className="w-3 h-3 mr-1 text-gray-400" />
+                                <span className="font-mono text-blue-600">{payment.receiptNo}</span>
+                                <span className="mx-1 text-gray-400">•</span>
+                                <span className="font-semibold">₹{inr(payment.amount)}</span>
+                                {payment.date && (
+                                  <>
+                                    <span className="mx-1 text-gray-400">•</span>
+                                    <span className="text-gray-500">{new Date(payment.date).toLocaleDateString('en-GB')}</span>
+                                  </>
+                                )}
+                              </div>
+                            ))}
                           </div>
                         ) : '-'}
                       </td>
