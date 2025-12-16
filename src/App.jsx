@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   Search, History, CreditCard, CheckCircle, User, Calendar, XCircle,
-  BarChart3, Filter, Download, RefreshCcw, FileSearch, Bell, Users, Receipt
+  BarChart3, Filter, Download, RefreshCcw, FileSearch, Bell, Users, Receipt,
+  MessageCircle, Copy
 } from 'lucide-react';
 import ReceiptModal from './components/ReceiptModal';
 import StudentFeeStatus from './components/StudentFeeStatus';
@@ -1558,11 +1559,11 @@ function RemindersTab({ students, feeheads, payments, teacherClass }) {
   const totalCount = groupByStudent && groupedRows ? groupedRows.length : itemRows.length;
 
   return (
-    <div className="bg-white rounded-lg shadow p-4 space-y-4">
+    <div className="bg-white rounded-lg shadow p-3 sm:p-4 space-y-3 sm:space-y-4">
       {/* DEBUG INFO PANEL */}
       {teacherClass && (
-        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
-          <h4 className="text-sm font-medium text-yellow-800 mb-2">Debug Info (Teacher: {teacherClass})</h4>
+        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-2 sm:p-3">
+          <h4 className="text-xs sm:text-sm font-medium text-yellow-800 mb-2">Debug Info (Teacher: {teacherClass})</h4>
           <div className="text-xs text-yellow-700 space-y-1">
             <div>Total Students: {students.length} | Filtered for class: {students.filter(s => ckey(s.cls || s.class) === ckey(teacherClass)).length}</div>
             <div>Total Fee Heads: {feeheads.length} | For class {teacherClass}: {feeheads.filter(f => ckey(f.class) === ckey(teacherClass)).length}</div>
@@ -1572,134 +1573,263 @@ function RemindersTab({ students, feeheads, payments, teacherClass }) {
         </div>
       )}
 
-      <div className="flex flex-col sm:flex-row gap-3 sm:items-end">
-        <div>
-          <label className="block text-xs text-gray-500 mb-1">Filter by Class</label>
-          <select value={remClass} onChange={e=>setRemClass(e.target.value)} className="px-3 py-2 border rounded-md">
-            <option>All</option>
-            {classes.map(c => <option key={c}>{c}</option>)}
-          </select>
-        </div>
+      {/* Mobile-friendly controls */}
+      <div className="space-y-3">
+        <div className="flex flex-col sm:flex-row gap-3">
+          <div className="w-full sm:w-auto">
+            <label className="block text-xs text-gray-500 mb-1">Filter by Class</label>
+            <select value={remClass} onChange={e=>setRemClass(e.target.value)} className="w-full sm:w-auto px-3 py-2 border rounded-md text-sm">
+              <option>All</option>
+              {classes.map(c => <option key={c}>{c}</option>)}
+            </select>
+          </div>
 
-        {/* NEW: checkboxes */}
-        <div className="flex items-center gap-4">
-          <label className="inline-flex items-center gap-2 text-sm">
-            <input type="checkbox" checked={groupByStudent} onChange={e=>setGroupByStudent(e.target.checked)} />
-            Group by student
-          </label>
-          <label className="inline-flex items-center gap-2 text-sm">
-            <input type="checkbox" checked={onlyOverdue} onChange={e=>setOnlyOverdue(e.target.checked)} />
-            Only overdue (pending)
-          </label>
-        </div>
-
-        <div className="flex-1">
-          <label className="block text-xs text-gray-500 mb-1">Message Template</label>
-          <textarea
-            value={remTemplate}
-            onChange={e=>setRemTemplate(e.target.value)}
-            rows={3}
-            className="w-full px-3 py-2 border rounded-md text-sm"
-          />
-          <div className="text-xs text-gray-500 mt-1">
-            Placeholders: {'{name}'}, {'{admNo}'}, {'{class}'}, {'{feeHead}'}, {'{amount}'}, {'{dueDate}'}, <b>{'{lines}'}</b>.
+          <div className="flex-1">
+            <button onClick={downloadCSV} className="w-full sm:w-auto px-4 py-2 border rounded-md text-sm font-medium hover:bg-gray-50">
+              <Download className="w-4 h-4 inline mr-1" /> Download CSV
+            </button>
           </div>
         </div>
 
-        <div>
-          <button onClick={downloadCSV} className="px-3 py-2 border rounded-md">Download CSV</button>
+        {/* Checkboxes in mobile-friendly layout */}
+        <div className="flex flex-col sm:flex-row gap-2 sm:gap-4">
+          <label className="inline-flex items-center gap-2 text-sm cursor-pointer">
+            <input type="checkbox" checked={groupByStudent} onChange={e=>setGroupByStudent(e.target.checked)} className="w-4 h-4" />
+            <span>Group by student</span>
+          </label>
+          <label className="inline-flex items-center gap-2 text-sm cursor-pointer">
+            <input type="checkbox" checked={onlyOverdue} onChange={e=>setOnlyOverdue(e.target.checked)} className="w-4 h-4" />
+            <span>Only overdue (pending)</span>
+          </label>
+        </div>
+
+        {/* Message template - collapsible on mobile */}
+        <details className="border rounded-lg">
+          <summary className="px-3 py-2 cursor-pointer text-sm font-medium bg-gray-50 hover:bg-gray-100 rounded-lg">
+            Message Template
+          </summary>
+          <div className="p-3">
+            <textarea
+              value={remTemplate}
+              onChange={e=>setRemTemplate(e.target.value)}
+              rows={4}
+              className="w-full px-3 py-2 border rounded-md text-xs sm:text-sm"
+              placeholder="Enter message template..."
+            />
+            <div className="text-xs text-gray-500 mt-2">
+              Placeholders: {'{name}'}, {'{admNo}'}, {'{class}'}, {'{feeHead}'}, {'{amount}'}, {'{dueDate}'}, <b>{'{lines}'}</b>.
+            </div>
+          </div>
+        </details>
+      </div>
+
+      <div className="flex items-center justify-between">
+        <div className="text-sm font-medium text-gray-700">
+          {totalCount} {groupByStudent ? 'Student(s)' : 'Item(s)'}
         </div>
       </div>
 
-      <div className="text-sm text-gray-600">Items: {totalCount}</div>
-
-      <div className="overflow-x-auto">
+      <div className="overflow-x-auto -mx-3 sm:mx-0">
         {groupByStudent && groupedRows ? (
-          // ---- grouped table (one row per student) ----
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-3 py-2 text-left text-xs text-gray-500">Student</th>
-                <th className="px-3 py-2 text-left text-xs text-gray-500">Class</th>
-                <th className="px-3 py-2 text-left text-xs text-gray-500">Heads</th>
-                <th className="px-3 py-2 text-left text-xs text-gray-500">Total</th>
-                <th className="px-3 py-2 text-left text-xs text-gray-500">Earliest Due</th>
-                <th className="px-3 py-2 text-left text-xs text-gray-500">WhatsApp</th>
-                <th className="px-3 py-2 text-left text-xs text-gray-500">Copy</th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
+          // ---- grouped table (one row per student) - Mobile responsive ----
+          <>
+            {/* Desktop table view */}
+            <table className="hidden sm:table min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-3 py-2 text-left text-xs text-gray-500">Student</th>
+                  <th className="px-3 py-2 text-left text-xs text-gray-500">Class</th>
+                  <th className="px-3 py-2 text-left text-xs text-gray-500">Heads</th>
+                  <th className="px-3 py-2 text-left text-xs text-gray-500">Total</th>
+                  <th className="px-3 py-2 text-left text-xs text-gray-500">Earliest Due</th>
+                  <th className="px-3 py-2 text-left text-xs text-gray-500">WhatsApp</th>
+                  <th className="px-3 py-2 text-left text-xs text-gray-500">Copy</th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {groupedRows.map((g, i) => {
+                  const phone = cleanPhone(g.phone);
+                  const text = renderGroupedTemplate(g);
+                  const href = phone ? `https://wa.me/${phone}?text=${encodeURIComponent(text)}` : null;
+                  return (
+                    <tr key={i} className="hover:bg-gray-50">
+                      <td className="px-3 py-2 text-sm">{g.name} ({g.admNo})</td>
+                      <td className="px-3 py-2 text-sm">{g.cls}</td>
+                      <td className="px-3 py-2 text-sm">
+                        {g.items.map(it => it.feeHead).join(', ')}
+                      </td>
+                      <td className="px-3 py-2 text-sm">₹{Number(g.total||0).toLocaleString('en-IN')}</td>
+                      <td className="px-3 py-2 text-sm">{fmtDateIST(g.earliestDue)}</td>
+                      <td className="px-3 py-2 text-sm">
+                        {href ? <a className="text-green-700 hover:underline" href={href} target="_blank" rel="noreferrer">WhatsApp</a> : <span className="text-red-500">No phone</span>}
+                      </td>
+                      <td className="px-3 py-2 text-sm">
+                        <button
+                          onClick={async()=>{ try { await navigator.clipboard.writeText(text); alert('Copied'); } catch { alert('Copy failed'); } }}
+                          className="text-indigo-600 hover:underline"
+                        >
+                          Copy
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+
+            {/* Mobile card view */}
+            <div className="sm:hidden space-y-3 px-3">
               {groupedRows.map((g, i) => {
                 const phone = cleanPhone(g.phone);
                 const text = renderGroupedTemplate(g);
                 const href = phone ? `https://wa.me/${phone}?text=${encodeURIComponent(text)}` : null;
                 return (
-                  <tr key={i} className="hover:bg-gray-50">
-                    <td className="px-3 py-2 text-sm">{g.name} ({g.admNo})</td>
-                    <td className="px-3 py-2 text-sm">{g.cls}</td>
-                    <td className="px-3 py-2 text-sm">
-                      {g.items.map(it => it.feeHead).join(', ')}
-                    </td>
-                    <td className="px-3 py-2 text-sm">₹{Number(g.total||0).toLocaleString('en-IN')}</td>
-                    <td className="px-3 py-2 text-sm">{fmtDateIST(g.earliestDue)}</td>
-                    <td className="px-3 py-2 text-sm">
-                      {href ? <a className="text-green-700 hover:underline" href={href} target="_blank" rel="noreferrer">WhatsApp</a> : <span className="text-red-500">No phone</span>}
-                    </td>
-                    <td className="px-3 py-2 text-sm">
+                  <div key={i} className="border rounded-lg p-3 bg-white shadow-sm">
+                    <div className="flex items-start justify-between mb-2">
+                      <div className="flex-1">
+                        <div className="font-medium text-sm text-gray-900">{g.name}</div>
+                        <div className="text-xs text-gray-500">Adm: {g.admNo} • Class: {g.cls}</div>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-sm font-bold text-red-600">₹{Number(g.total||0).toLocaleString('en-IN')}</div>
+                        <div className="text-xs text-gray-500">{fmtDateIST(g.earliestDue)}</div>
+                      </div>
+                    </div>
+                    
+                    <div className="mb-2 pb-2 border-b">
+                      <div className="text-xs text-gray-600 font-medium mb-1">Pending Fees:</div>
+                      <div className="space-y-1">
+                        {g.items.map((it, idx) => (
+                          <div key={idx} className="text-xs text-gray-700 flex justify-between">
+                            <span>{it.feeHead}</span>
+                            <span className="font-medium">₹{Number(it.amount||0).toLocaleString('en-IN')}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                    
+                    <div className="flex gap-2">
+                      {href ? (
+                        <a
+                          className="flex-1 px-3 py-2 bg-green-600 text-white text-center text-sm rounded-lg hover:bg-green-700 flex items-center justify-center gap-1"
+                          href={href}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          <MessageCircle className="w-4 h-4" /> WhatsApp
+                        </a>
+                      ) : (
+                        <div className="flex-1 px-3 py-2 bg-gray-100 text-gray-400 text-center text-sm rounded-lg">
+                          No Phone
+                        </div>
+                      )}
                       <button
                         onClick={async()=>{ try { await navigator.clipboard.writeText(text); alert('Copied'); } catch { alert('Copy failed'); } }}
-                        className="text-indigo-600 hover:underline"
+                        className="px-3 py-2 border border-indigo-600 text-indigo-600 text-sm rounded-lg hover:bg-indigo-50 flex items-center gap-1"
                       >
-                        Copy
+                        <Copy className="w-4 h-4" /> Copy
                       </button>
-                    </td>
-                  </tr>
+                    </div>
+                  </div>
                 );
               })}
-            </tbody>
-          </table>
+            </div>
+          </>
         ) : (
-          // ---- itemized table (one row per unpaid head) ----
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-3 py-2 text-left text-xs text-gray-500">Student</th>
-                <th className="px-3 py-2 text-left text-xs text-gray-500">Class</th>
-                <th className="px-3 py-2 text-left text-xs text-gray-500">Fee Head</th>
-                <th className="px-3 py-2 text-left text-xs text-gray-500">Amount</th>
-                <th className="px-3 py-2 text-left text-xs text-gray-500">Due</th>
-                <th className="px-3 py-2 text-left text-xs text-gray-500">WhatsApp</th>
-                <th className="px-3 py-2 text-left text-xs text-gray-500">Copy</th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
+          // ---- itemized table (one row per unpaid head) - Mobile responsive ----
+          <>
+            {/* Desktop table view */}
+            <table className="hidden sm:table min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-3 py-2 text-left text-xs text-gray-500">Student</th>
+                  <th className="px-3 py-2 text-left text-xs text-gray-500">Class</th>
+                  <th className="px-3 py-2 text-left text-xs text-gray-500">Fee Head</th>
+                  <th className="px-3 py-2 text-left text-xs text-gray-500">Amount</th>
+                  <th className="px-3 py-2 text-left text-xs text-gray-500">Due</th>
+                  <th className="px-3 py-2 text-left text-xs text-gray-500">WhatsApp</th>
+                  <th className="px-3 py-2 text-left text-xs text-gray-500">Copy</th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {itemRows.map((r, i) => {
+                  const phone = cleanPhone(r.phone);
+                  const text = renderItemTemplate(r);
+                  const href = phone ? `https://wa.me/${phone}?text=${encodeURIComponent(text)}` : null;
+                  return (
+                    <tr key={i} className="hover:bg-gray-50">
+                      <td className="px-3 py-2 text-sm">{r.name} ({r.admNo})</td>
+                      <td className="px-3 py-2 text-sm">{r.cls}</td>
+                      <td className="px-3 py-2 text-sm">{r.feeHead}</td>
+                      <td className="px-3 py-2 text-sm">₹{Number(r.amount||0).toLocaleString('en-IN')}</td>
+                      <td className="px-3 py-2 text-sm">{fmtDateIST(r.dueDate)}</td>
+                      <td className="px-3 py-2 text-sm">
+                        {href ? <a className="text-green-700 hover:underline" href={href} target="_blank" rel="noreferrer">WhatsApp</a> : <span className="text-red-500">No phone</span>}
+                      </td>
+                      <td className="px-3 py-2 text-sm">
+                        <button
+                          onClick={async()=>{ try { await navigator.clipboard.writeText(text); alert('Copied'); } catch { alert('Copy failed'); } }}
+                          className="text-indigo-600 hover:underline"
+                        >
+                          Copy
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+
+            {/* Mobile card view */}
+            <div className="sm:hidden space-y-3 px-3">
               {itemRows.map((r, i) => {
                 const phone = cleanPhone(r.phone);
                 const text = renderItemTemplate(r);
                 const href = phone ? `https://wa.me/${phone}?text=${encodeURIComponent(text)}` : null;
                 return (
-                  <tr key={i} className="hover:bg-gray-50">
-                    <td className="px-3 py-2 text-sm">{r.name} ({r.admNo})</td>
-                    <td className="px-3 py-2 text-sm">{r.cls}</td>
-                    <td className="px-3 py-2 text-sm">{r.feeHead}</td>
-                    <td className="px-3 py-2 text-sm">₹{Number(r.amount||0).toLocaleString('en-IN')}</td>
-                    <td className="px-3 py-2 text-sm">{fmtDateIST(r.dueDate)}</td>
-                    <td className="px-3 py-2 text-sm">
-                      {href ? <a className="text-green-700 hover:underline" href={href} target="_blank" rel="noreferrer">WhatsApp</a> : <span className="text-red-500">No phone</span>}
-                    </td>
-                    <td className="px-3 py-2 text-sm">
+                  <div key={i} className="border rounded-lg p-3 bg-white shadow-sm">
+                    <div className="flex items-start justify-between mb-2">
+                      <div className="flex-1">
+                        <div className="font-medium text-sm text-gray-900">{r.name}</div>
+                        <div className="text-xs text-gray-500">Adm: {r.admNo} • Class: {r.cls}</div>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-sm font-bold text-red-600">₹{Number(r.amount||0).toLocaleString('en-IN')}</div>
+                        <div className="text-xs text-gray-500">{fmtDateIST(r.dueDate)}</div>
+                      </div>
+                    </div>
+                    
+                    <div className="mb-2 pb-2 border-b">
+                      <div className="text-xs font-medium text-gray-700">{r.feeHead}</div>
+                    </div>
+                    
+                    <div className="flex gap-2">
+                      {href ? (
+                        <a
+                          className="flex-1 px-3 py-2 bg-green-600 text-white text-center text-sm rounded-lg hover:bg-green-700 flex items-center justify-center gap-1"
+                          href={href}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          <MessageCircle className="w-4 h-4" /> WhatsApp
+                        </a>
+                      ) : (
+                        <div className="flex-1 px-3 py-2 bg-gray-100 text-gray-400 text-center text-sm rounded-lg">
+                          No Phone
+                        </div>
+                      )}
                       <button
                         onClick={async()=>{ try { await navigator.clipboard.writeText(text); alert('Copied'); } catch { alert('Copy failed'); } }}
-                        className="text-indigo-600 hover:underline"
+                        className="px-3 py-2 border border-indigo-600 text-indigo-600 text-sm rounded-lg hover:bg-indigo-50 flex items-center gap-1"
                       >
-                        Copy
+                        <Copy className="w-4 h-4" /> Copy
                       </button>
-                    </td>
-                  </tr>
+                    </div>
+                  </div>
                 );
               })}
-            </tbody>
-          </table>
+            </div>
+          </>
         )}
       </div>
     </div>
